@@ -7,7 +7,7 @@ Download Jira Cloud attachments without exposing the API token. Zero runtime dep
 - The token lives only in the macOS Keychain (service `jat-jira-token`). It is never written to a file, an env var, or argv.
 - By default the Keychain item trusts no application (`-T ""`), so every read shows a macOS dialog. An AI agent or script cannot read it silently. `--allow-silent-read` removes that dialog, but then any process that runs `security` can read the token.
 - The `Authorization` header is sent only to the API origin. The redirect to the signed media URL is followed by hand, restricted to HTTPS `*.atlassian.net` / `*.atlassian.com`, and goes without credentials.
-- Downloads go to `0600` files under a `0700` directory. Names are sanitised (no traversal), existing files are never overwritten, and size is capped (`--max-size`, default 200 MB).
+- Downloads go to `0600` files (the output directory is created as `0700`; an existing `--out` directory keeps its own permissions). Names are sanitised (no traversal), existing files are never overwritten, and size is capped (`--max-size`, default 200 MB).
 - Error messages never include the token or signed query strings.
 
 ## Setup

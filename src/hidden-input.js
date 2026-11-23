@@ -3,7 +3,9 @@ const CTRL_C = '\u0003';
 const BACKSPACE = new Set(['\u007f', '\b']);
 
 export function promptHidden(question, { input = process.stdin, output = process.stderr } = {}) {
-  return input.isTTY ? readFromTty(question, input, output) : readFirstLine(input);
+  if (input.isTTY) return readFromTty(question, input, output);
+  output.write('stdin is not a terminal; reading the token from the first line of stdin\n');
+  return readFirstLine(input);
 }
 
 function readFromTty(question, input, output) {

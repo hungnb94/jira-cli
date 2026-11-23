@@ -12,9 +12,9 @@ description: Download and inspect attachments (logs, screenshots, videos, crash 
 - Run only `jat list|get|auth status`. Never run `security find-generic-password`, `security dump-keychain`, or anything else that reads the Keychain item `jat-jira-token`.
 - Never write a `curl`/`fetch` call with Jira credentials, never read or export `JIRA_*` token variables, never ask the user to paste a token into the chat.
 - Each `jat list` or `get` may show a macOS Keychain dialog that the user must approve. Tell the user before running it, then wait for the command; do not retry in a loop if it is denied.
-- Not logged in, or token rejected (401): ask the user to run it themselves:
-  `! jat auth login --site <site>.atlassian.net --email <their-atlassian-email>`
-  The token is entered at a hidden prompt in their terminal. Create one at https://id.atlassian.com/manage-profile/security/api-tokens (prefer a scoped token with `read:jira-work` and `read:jira-user`, with an expiry date).
+- Not logged in, or token rejected (401): ask the user to run this in their own terminal app, not with `!` inside Claude Code (the hidden token prompt needs a real TTY):
+  `jat auth login --site <site>.atlassian.net --email <their-atlassian-email>`
+  Never run `auth login` yourself. Create one at https://id.atlassian.com/manage-profile/security/api-tokens (prefer a scoped token with `read:jira-work` and `read:jira-user`, with an expiry date).
 
 ## Workflow
 
