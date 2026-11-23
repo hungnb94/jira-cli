@@ -1,9 +1,20 @@
 version: 2
 updates:
-  # jat has no npm dependencies, so only the pinned GitHub Actions need updates.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "ci"
+
+  # Dev dependencies only (TypeScript toolchain); jat has no runtime dependencies.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"

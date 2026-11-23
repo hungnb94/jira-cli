@@ -32,11 +32,29 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
       - name: Run tests
         run: npm test
 
+      - name: Build
+        run: npm run build
+
       - name: Smoke test the CLI
-        run: node bin/jat.js --help
+        run: node dist/bin.js --help
+
+      - name: Check jat --version matches package.json
+        run: |
+          expected="$(node -p 'require("./package.json").version')"
+          actual="$(node dist/bin.js --version)"
+          if [ "$actual" != "$expected" ]; then
+            echo "jat --version printed '${actual}', expected '${expected}'"
+            exit 1
+          fi
 
       - name: Check the package contents
         run: npm pack --dry-run

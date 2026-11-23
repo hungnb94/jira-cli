@@ -1,6 +1,6 @@
 # jat — Jira ATtachments
 
-Download Jira Cloud attachments without exposing the API token. Zero runtime dependencies, Node 20+, macOS, Windows and Linux.
+Download Jira Cloud attachments without exposing the API token. Written in TypeScript, zero runtime dependencies, Node 20+, macOS, Windows and Linux.
 
 ## Security model
 
@@ -39,7 +39,7 @@ npx skills add hungnb94/jira-cli --skill jira-attachments      # asks which agen
 npx skills remove jira-attachments
 ```
 
-From a clone instead: `npm test`, then `npm link` (or `ln -s "$PWD/bin/jat.js" ~/bin/jat`) and `npx skills add ./ --skill jira-attachments`.
+From a clone instead: `npm ci && npm test && npm run build`, then `npm link` (or `ln -s "$PWD/dist/bin.js" ~/bin/jat`) and `npx skills add ./ --skill jira-attachments`.
 
 ## Usage
 
@@ -47,11 +47,13 @@ From a clone instead: `npm test`, then `npm link` (or `ln -s "$PWD/bin/jat.js" ~
 jat list PROJ-5140
 jat get PROJ-5140                       # into ./PROJ-5140/
 jat get PROJ-5140 --filter mp4 --out ~/Downloads/PROJ-5140 --json
+jat --version                           # installed version, e.g. 0.3.0
 ```
 
 ## Contributing
 
 - PR titles follow Conventional Commits (`feat:`, `fix:`, `docs:` …); CI checks this.
 - A PR that changes behaviour bumps `version` itself: `npm version <patch|minor|major> --no-git-tag-version` (`feat` → minor, `fix`/`perf`/`refactor`/`revert` → patch, `!` or `BREAKING CHANGE` → major). `docs`/`chore`/`ci`/`test`/`style`/`build` PRs, or PRs labelled `skip-release`, keep it. The Version Check workflow posts the suggested bump on the PR.
-- CI runs `npm test` on Ubuntu with Node 20, 22 and 24, and scans for secrets with Gitleaks. Every credential store is tested through a fake command runner, so no runner needs a real Keychain, keyring or Windows.
+- The source is TypeScript in `src/`, compiled to `dist/` by `npm run build` (run automatically before `npm pack` and `npm publish`). Tests run on the `.ts` files through `tsx`; `npm run typecheck` checks `src/` and `test/`.
+- CI type-checks, runs `npm test` and builds on Ubuntu with Node 20, 22 and 24, and scans for secrets with Gitleaks. Every credential store is tested through a fake command runner, so no runner needs a real Keychain, keyring or Windows.
 - Merging to `main` publishes the new version to npm (trusted publishing, no token), then tags it and creates a GitHub Release. Re-run the Release workflow by hand to retry a failed release.

@@ -1,18 +1,20 @@
 {
   "name": "@hungnb94/jat",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Download Jira Cloud attachments with the API token kept in the OS credential store (macOS Keychain, Windows DPAPI, Linux Secret Service)",
   "type": "module",
   "bin": {
-    "jat": "bin/jat.js"
+    "jat": "dist/bin.js"
   },
   "files": [
-    "bin",
-    "src",
+    "dist",
     "skills"
   ],
   "scripts": {
-    "test": "node --test"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc",
+    "test": "tsx --test",
+    "prepack": "npm run build"
   },
   "engines": {
     "node": ">=20"
@@ -39,5 +41,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

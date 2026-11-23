@@ -94,9 +94,12 @@ jobs:
         if: steps.version.outputs.should_publish == 'true'
         run: git checkout --detach "${{ steps.target.outputs.sha }}"
 
-      - name: Run tests
+      - name: Install dev dependencies and run tests
         if: steps.version.outputs.should_publish == 'true'
-        run: npm test
+        run: |
+          # Releases before the TypeScript build have no lockfile and nothing to install.
+          if [ -f package-lock.json ]; then npm ci; fi
+          npm test
 
       - name: Publish to npm
         if: steps.version.outputs.should_publish == 'true'
