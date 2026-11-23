@@ -33,13 +33,20 @@ interface RawAttachment {
   created?: string;
 }
 
+type HttpMethod = 'GET' | 'POST';
+
+interface JsonRequestOptions {
+  body?: FormData;
+  headers?: Record<string, string>;
+}
+
 export const DEFAULT_ALLOWED_HOSTS: RegExp[] = [/(^|\.)atlassian\.net$/, /(^|\.)atlassian\.com$/];
 
 export class HttpError extends Error {
   readonly status: number;
 
-  constructor(status: number, url: URL) {
-    super(`GET ${url.origin}${url.pathname} -> HTTP ${status}`);
+  constructor(method: HttpMethod, status: number, url: URL) {
+    super(`${method} ${url.origin}${url.pathname} -> HTTP ${status}`);
     this.status = status;
   }
 }
@@ -72,12 +79,12 @@ export class JiraClient {
   }
 
   async myself(): Promise<JiraUser> {
-    return (await this.#getJson('/rest/api/3/myself')) as JiraUser;
+    return (await this.#requestJson('GET', '/rest/api/3/myself')) as JiraUser;
   }
 
   async listAttachments(key: string): Promise<Attachment[]> {
     assertIssueKey(key);
-    const issue = (await this.#getJson(`/rest/api/3/issue/${key}?fields=attachment`)) as {
+    const issue = (await this.#requestJson('GET', `/rest/api/3/issue/${key}?fields=attachment`)) as {
       fields?: { attachment?: RawAttachment[] };
     };
     return (issue.fields?.attachment ?? []).map((a) => ({
@@ -100,7 +107,7 @@ export class JiraClient {
       if (!REDIRECT_STATUSES.has(response.status)) {
         if (!response.ok) {
           await response.body?.cancel();
-          throw new HttpError(response.status, url);
+          throw new HttpError('GET', response.status, url);
         }
         return response;
       }
@@ -119,15 +126,17 @@ export class JiraClient {
     return new URL(`${this.#apiBase.pathname.replace(/\/$/, '')}${path}`, this.#apiBase);
   }
 
-  async #getJson(path: string): Promise<unknown> {
+  async #requestJson(method: HttpMethod, path: string, { body, headers }: JsonRequestOptions = {}): Promise<unknown> {
     const url = this.#url(path);
     const response = await this.#fetch(url, {
-      headers: { Authorization: this.#authorization, Accept: 'application/json' },
+      method,
+      body,
+      headers: { ...headers, Authorization: this.#authorization, Accept: 'application/json' },
       redirect: 'error',
     });
     if (!response.ok) {
       await response.body?.cancel();
-      throw new HttpError(response.status, url);
+      throw new HttpError(method, response.status, url);
     }
     return response.json();
   }
