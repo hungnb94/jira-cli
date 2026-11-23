@@ -2,8 +2,9 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { OPTIONS, type Io, type Values } from './commands/types.js';
 import { configPath, loadConfig, saveConfig, type Config } from './config.js';
-import { downloadAttachments, selectAttachments, type DownloadResult } from './download.js';
+import { downloadAttachments, selectAttachments } from './download.js';
 import { errorMessage } from './error-info.js';
+import { formatSize, printResults } from './format.js';
 import { promptHidden } from './hidden-input.js';
 import { HttpError, JiraClient, assertIssueKey, type JiraUser } from './jira-client.js';
 import {
@@ -215,21 +216,4 @@ async function get(rawKey: string | undefined, values: Values, io: Io, stores: C
   if (values.json) io.out(JSON.stringify(results, null, 2));
   else printResults(key, results, io);
   return results.some((r) => r.status === 'failed') ? 1 : 0;
-}
-
-function printResults(key: string, results: DownloadResult[], io: Io): void {
-  if (results.length === 0) io.out(`${key}: no matching attachments.`);
-  for (const r of results) {
-    const name = printable(r.filename);
-    if (r.status === 'downloaded') io.out(`downloaded  ${r.path}`);
-    else if (r.status === 'exists') io.out(`exists      ${r.path}`);
-    else io.err(`${r.status.padEnd(11)} ${name}: ${printable(r.reason)}`);
-  }
-}
-
-function formatSize(bytes: number): string {
-  if (!Number.isFinite(bytes)) return '?';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
