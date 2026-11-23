@@ -32,11 +32,20 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
       - name: Run tests
         run: npm test
 
+      - name: Build
+        run: npm run build
+
       - name: Smoke test the CLI
-        run: node bin/jat.js --help
+        run: node dist/bin.js --help
 
       - name: Check the package contents
         run: npm pack --dry-run
