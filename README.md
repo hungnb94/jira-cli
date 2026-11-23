@@ -28,3 +28,9 @@ jat list PROJ-5140
 jat get PROJ-5140                       # into ./PROJ-5140/
 jat get PROJ-5140 --filter mp4 --out ~/Downloads/PROJ-5140 --json
 ```
+
+## Contributing
+
+- PR titles follow Conventional Commits (`feat:`, `fix:`, `docs:` …); CI checks this.
+- A PR that changes behaviour bumps `version` itself: `npm version <patch|minor|major> --no-git-tag-version` (`feat` → minor, `fix`/`perf`/`refactor`/`revert` → patch, `!` or `BREAKING CHANGE` → major). `docs`/`chore`/`ci`/`test`/`style`/`build` PRs, or PRs labelled `skip-release`, keep it. The Version Check workflow posts the suggested bump on the PR.
+- CI runs `npm test` on Ubuntu and macOS with Node 20, 22 and 24, and scans for secrets with Gitleaks.
