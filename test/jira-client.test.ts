@@ -17,6 +17,11 @@ before(async () => {
       res.setHeader('content-type', 'application/json');
       return res.end(JSON.stringify({ fields: { attachment: [{ id: 1, filename: 'log.txt', size: 7, mimeType: 'text/plain' }] } }));
     }
+    if (req.url === '/rest/api/3/issue/PROJ-3?fields=attachment') {
+      res.statusCode = 401;
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ code: 401, message: 'Unauthorized; scope does not match' }));
+    }
     const redirects: Record<string, string> = {
       '/rest/api/3/attachment/content/1': `${media.origin}/file/1?token=SIGNED`,
       '/rest/api/3/attachment/content/2': 'https://evil.example.com/steal',
@@ -97,6 +102,54 @@ test('reports 401 without exposing credentials', async () => {
     assert.ok(error instanceof HttpError);
     assert.equal(error.status, 401);
     assert.doesNotMatch(error.message, /SECRET|bWVA/);
+    return true;
+  });
+});
+
+test('uploads files as one multipart POST with the no-check header', async () => {
+  let seen: { method?: string; token?: string | string[]; type?: string; body: string } = { body: '' };
+  const uploads = await startServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      seen = { method: req.method, token: req.headers['x-atlassian-token'], type: req.headers['content-type'], body };
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify([{ id: '20', filename: 'crash.log', size: 4, mimeType: 'text/plain', created: 'now', self: 'x' }]));
+    });
+  });
+  try {
+    const uploader = new JiraClient({ apiBase: uploads.origin, email: 'me@x.io', token: 'SECRET', allowedHosts: LOOPBACK, allowInsecure: true });
+    const created = await uploader.uploadAttachments('PROJ-1', [{ name: 'crash.log', blob: new Blob(['boom']) }]);
+    assert.deepEqual(created, [{ id: '20', filename: 'crash.log', size: 4, mimeType: 'text/plain', created: 'now' }]);
+    assert.equal(uploads.requests[0].url, '/rest/api/3/issue/PROJ-1/attachments');
+    assert.match(uploads.requests[0].authorization ?? '', /^Basic /);
+    assert.equal(seen.method, 'POST');
+    assert.equal(seen.token, 'no-check');
+    assert.match(seen.type ?? '', /^multipart\/form-data; boundary=/);
+    assert.match(seen.body, /Content-Disposition: form-data; name="file"; filename="crash.log"\r\n[\s\S]*\r\n\r\nboom\r\n/);
+  } finally {
+    await uploads.close();
+  }
+});
+
+test('rejects a malformed key before uploading', async () => {
+  await assert.rejects(client().uploadAttachments('PROJ-1/../x', []), /Invalid Jira key/);
+});
+
+test('upload errors name the POST method and status', async () => {
+  await assert.rejects(client().uploadAttachments('PROJ-9', [{ name: 'a', blob: new Blob(['a']) }]), (error) => {
+    assert.ok(error instanceof HttpError);
+    assert.match(error.message, /^POST .*\/rest\/api\/3\/issue\/PROJ-9\/attachments -> HTTP 401$/);
+    return true;
+  });
+});
+
+test('HTTP errors carry the message Jira sent back', async () => {
+  await assert.rejects(client().listAttachments('PROJ-3'), (error) => {
+    assert.ok(error instanceof HttpError);
+    assert.equal(error.detail, 'Unauthorized; scope does not match');
+    assert.match(error.message, /^GET .*\/issue\/PROJ-3 -> HTTP 401: Unauthorized; scope does not match$/);
     return true;
   });
 });

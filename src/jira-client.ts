@@ -1,3 +1,5 @@
+import { readErrorDetail } from './jira-error.js';
+
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 const ATTACHMENT_ID = /^\d+$/;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -10,6 +12,11 @@ export interface Attachment {
   size: number;
   mimeType?: string;
   created?: string;
+}
+
+export interface UploadFile {
+  name: string;
+  blob: Blob;
 }
 
 export interface JiraUser {
@@ -33,15 +40,28 @@ interface RawAttachment {
   created?: string;
 }
 
+type HttpMethod = 'GET' | 'POST';
+
+interface JsonRequestOptions {
+  body?: FormData;
+  headers?: Record<string, string>;
+}
+
 export const DEFAULT_ALLOWED_HOSTS: RegExp[] = [/(^|\.)atlassian\.net$/, /(^|\.)atlassian\.com$/];
 
 export class HttpError extends Error {
   readonly status: number;
+  readonly detail?: string;
 
-  constructor(status: number, url: URL) {
-    super(`GET ${url.origin}${url.pathname} -> HTTP ${status}`);
+  constructor(method: HttpMethod, status: number, url: URL, detail?: string) {
+    super(`${method} ${url.origin}${url.pathname} -> HTTP ${status}${detail ? `: ${detail}` : ''}`);
     this.status = status;
+    this.detail = detail;
   }
+}
+
+function toAttachment(a: RawAttachment): Attachment {
+  return { id: String(a.id), filename: a.filename, size: a.size, mimeType: a.mimeType, created: a.created };
 }
 
 export function assertIssueKey(key: string): void {
@@ -72,21 +92,27 @@ export class JiraClient {
   }
 
   async myself(): Promise<JiraUser> {
-    return (await this.#getJson('/rest/api/3/myself')) as JiraUser;
+    return (await this.#requestJson('GET', '/rest/api/3/myself')) as JiraUser;
   }
 
   async listAttachments(key: string): Promise<Attachment[]> {
     assertIssueKey(key);
-    const issue = (await this.#getJson(`/rest/api/3/issue/${key}?fields=attachment`)) as {
+    const issue = (await this.#requestJson('GET', `/rest/api/3/issue/${key}?fields=attachment`)) as {
       fields?: { attachment?: RawAttachment[] };
     };
-    return (issue.fields?.attachment ?? []).map((a) => ({
-      id: String(a.id),
-      filename: a.filename,
-      size: a.size,
-      mimeType: a.mimeType,
-      created: a.created,
-    }));
+    return (issue.fields?.attachment ?? []).map(toAttachment);
+  }
+
+  async uploadAttachments(key: string, files: UploadFile[]): Promise<Attachment[]> {
+    assertIssueKey(key);
+    const form = new FormData();
+    for (const file of files) form.append('file', file.blob, file.name);
+    const created = (await this.#requestJson('POST', `/rest/api/3/issue/${key}/attachments`, {
+      body: form,
+      headers: { 'X-Atlassian-Token': 'no-check' },
+    })) as unknown;
+    if (!Array.isArray(created)) throw new Error(`Unexpected upload response from Jira for ${key}`);
+    return (created as RawAttachment[]).map(toAttachment);
   }
 
   // Follows redirects by hand: the content URL redirects to a signed media URL on another host,
@@ -100,7 +126,7 @@ export class JiraClient {
       if (!REDIRECT_STATUSES.has(response.status)) {
         if (!response.ok) {
           await response.body?.cancel();
-          throw new HttpError(response.status, url);
+          throw new HttpError('GET', response.status, url);
         }
         return response;
       }
@@ -119,16 +145,15 @@ export class JiraClient {
     return new URL(`${this.#apiBase.pathname.replace(/\/$/, '')}${path}`, this.#apiBase);
   }
 
-  async #getJson(path: string): Promise<unknown> {
+  async #requestJson(method: HttpMethod, path: string, { body, headers }: JsonRequestOptions = {}): Promise<unknown> {
     const url = this.#url(path);
     const response = await this.#fetch(url, {
-      headers: { Authorization: this.#authorization, Accept: 'application/json' },
+      method,
+      body,
+      headers: { ...headers, Authorization: this.#authorization, Accept: 'application/json' },
       redirect: 'error',
     });
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new HttpError(response.status, url);
-    }
+    if (!response.ok) throw new HttpError(method, response.status, url, await readErrorDetail(response));
     return response.json();
   }
 

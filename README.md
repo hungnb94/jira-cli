@@ -1,6 +1,6 @@
 # jat — Jira ATtachments
 
-Download Jira Cloud attachments without exposing the API token. Written in TypeScript, zero runtime dependencies, Node 20+, macOS, Windows and Linux.
+Download and upload Jira Cloud attachments without exposing the API token. Written in TypeScript, zero runtime dependencies, Node 20+, macOS, Windows and Linux.
 
 ## Security model
 
@@ -17,6 +17,7 @@ Download Jira Cloud attachments without exposing the API token. Written in TypeS
 - Login records the store it used in the config, and every later command reads only from that store. `jat auth status` shows the store and whether reads are silent.
 - The `Authorization` header is sent only to the API origin. The redirect to the signed media URL is followed by hand, restricted to HTTPS `*.atlassian.net` / `*.atlassian.com`, and goes without credentials.
 - Downloads go to `0600` files (the output directory is created as `0700`; an existing `--out` directory keeps its own permissions). Names are sanitised (no traversal), existing files are never overwritten, and size is capped (`--max-size`, default 200 MB).
+- Uploads go in one `multipart/form-data` request to the API origin only, with redirects refused. Every path is checked (it must exist and be a regular file, at most 60 per command) before anything is sent, and files are streamed from disk.
 - Error messages never include the token or signed query strings.
 
 ## Setup
@@ -28,7 +29,22 @@ jat auth login --site your-site.atlassian.net --email you@company.com
 
 The jat config directory is `$XDG_CONFIG_HOME/jat/` or `~/.config/jat/`. `JAT_CONFIG` moves only `config.json`; token files always stay in the jat config directory, so they never end up in a project folder. On Linux, install `secret-tool` first (`libsecret-tools` on Debian/Ubuntu) to keep the token in the keyring instead of a file.
 
-Create the token at https://id.atlassian.com/manage-profile/security/api-tokens. Prefer a scoped token (`read:jira-work`, `read:jira-user`) with an expiry date. Login checks the site URL first and falls back to the `api.atlassian.com` gateway that scoped tokens require.
+### API token
+
+Prefer a scoped token with an expiry date:
+
+1. Open https://id.atlassian.com/manage-profile/security/api-tokens and choose **Create API token with scopes**.
+2. Give it a name and an expiry date, and pick **Jira** as the app.
+3. Pick the scopes for the commands you need:
+
+   | Commands | Scopes |
+   |---|---|
+   | `jat list`, `jat get` | `read:jira-work`, `read:jira-user` |
+   | `jat upload` | also `write:jira-work` (or the granular `write:attachment:jira`) |
+
+4. Copy the token and run `jat auth login`. To add scopes later, create a new token and log in again; the old one is replaced.
+
+Login checks the site URL first and falls back to the `api.atlassian.com` gateway that scoped tokens require. Through the gateway, a token without the scope for a call gets **HTTP 401**, not 403, so a read-only token can list and download but `jat upload` fails with 401. Uploading also needs the *Browse Projects* and *Create attachments* permissions in the project.
 
 ### Agent skill
 
@@ -47,6 +63,8 @@ From a clone instead: `npm ci && npm test && npm run build`, then `npm link` (or
 jat list PROJ-5140
 jat get PROJ-5140                       # into ./PROJ-5140/
 jat get PROJ-5140 --filter mp4 --out ~/Downloads/PROJ-5140 --json
+jat upload PROJ-5140 crash.log screen.png   # prints id, size, type and name of each new attachment
+jat upload PROJ-5140 build.zip --json       # same shape as jat list --json
 jat --version                           # installed version, e.g. 0.3.0
 ```
 

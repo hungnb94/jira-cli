@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
@@ -164,4 +164,76 @@ test('list and get need a login', async () => {
     assert.equal(result.code, 1);
     assert.match(result.err, /Not logged in\. Run: jat auth login/);
   }
+});
+
+const CREATED = [
+  { id: '20', filename: 'a.log', size: 3, mimeType: 'text/plain', created: '2026-01-03T00:00:00.000Z', self: 'x' },
+  { id: '21', filename: 'b.png', size: 4, mimeType: 'image/png', created: '2026-01-03T00:00:00.000Z', self: 'y' },
+];
+
+function stubUpload(status = 200, errorBody?: object): Request[] {
+  const requests: Request[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    requests.push(request);
+    if (status !== 200) return errorBody ? Response.json(errorBody, { status }) : new Response(null, { status });
+    return Response.json(CREATED);
+  }) as typeof fetch;
+  return requests;
+}
+
+async function uploadFiles(): Promise<string[]> {
+  const paths = [join(dir, 'a.log'), join(dir, 'b.png')];
+  await writeFile(paths[0], 'aaa');
+  await writeFile(paths[1], 'bbbb');
+  return paths;
+}
+
+test('upload sends every file in one request and prints one row each', async () => {
+  const requests = stubUpload();
+  const result = await run(['upload', 'proj-1', ...(await uploadFiles())], await loggedIn());
+  assert.deepEqual(result, { code: 0, out: '20\t3 B\ttext/plain\ta.log\n21\t4 B\timage/png\tb.png\n', err: '' });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].url, 'https://acme.atlassian.net/rest/api/3/issue/PROJ-1/attachments');
+  assert.equal(requests[0].redirect, 'error');
+  const form = await requests[0].formData();
+  assert.deepEqual(form.getAll('file').map((f) => (f as File).name), ['a.log', 'b.png']);
+});
+
+test('upload --json prints the created attachments in the list shape', async () => {
+  stubUpload();
+  const result = await run(['upload', 'PROJ-1', ...(await uploadFiles()), '--json'], await loggedIn());
+  assert.equal(result.code, 0);
+  assert.deepEqual(JSON.parse(result.out), CREATED.map(({ self: _self, ...a }) => a));
+});
+
+test('upload checks every path before sending anything', async () => {
+  const requests = stubUpload();
+  const [good] = await uploadFiles();
+  const missing = join(dir, 'missing.log');
+  const result = await run(['upload', 'PROJ-1', good, missing], await loggedIn());
+  assert.deepEqual(result, { code: 1, out: '', err: `jat: File not found: ${missing}\n` });
+  assert.equal(requests.length, 0);
+});
+
+test('upload explains a 403 from Jira', async () => {
+  stubUpload(403);
+  const result = await run(['upload', 'PROJ-1', ...(await uploadFiles())], await loggedIn());
+  assert.equal(result.code, 1);
+  assert.match(result.err, /^jat: Upload failed: no permission to attach files to PROJ-1\. .*HTTP 403\)\n$/);
+});
+
+test('upload explains a gateway 401 caused by a read-only token', async () => {
+  stubUpload(401, { code: 401, message: 'Unauthorized; scope does not match' });
+  const result = await run(['upload', 'PROJ-1', ...(await uploadFiles())], await loggedIn());
+  assert.equal(result.code, 1);
+  assert.match(result.err, /^jat: Upload failed: the API token lacks the write:jira-work scope needed to attach files to PROJ-1\./);
+  assert.match(result.err, /HTTP 401: Unauthorized; scope does not match\)\n$/);
+});
+
+test('upload needs files and a valid key', async () => {
+  const stores = await loggedIn();
+  assert.deepEqual(await run(['upload', 'PROJ-1'], stores), { code: 1, out: '', err: 'jat: No files to upload\n' });
+  assert.deepEqual(await run(['upload', 'nope', 'a.log'], stores), { code: 1, out: '', err: 'jat: Invalid Jira key: NOPE\n' });
 });

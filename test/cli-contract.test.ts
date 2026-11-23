@@ -12,6 +12,7 @@ const USAGE = `Usage:
   jat auth logout
   jat list <KEY> [--json]
   jat get <KEY> [--out <dir>] [--filter <text>] [--max-size <MB>] [--json]
+  jat upload <KEY> <file>... [--json]
   jat --version
 
 The API token is read from a hidden prompt (or the first line of stdin) and stored only in the OS credential

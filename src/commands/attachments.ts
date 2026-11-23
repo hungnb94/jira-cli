@@ -3,8 +3,9 @@ import { configPath, loadConfig } from '../config.js';
 import type { CredentialStores } from '../credential-store/index.js';
 import { downloadAttachments, selectAttachments } from '../download.js';
 import { formatSize, printResults } from '../format.js';
-import { JiraClient, assertIssueKey } from '../jira-client.js';
+import { JiraClient, assertIssueKey, type Attachment } from '../jira-client.js';
 import { printable } from '../safe-name.js';
+import { explainUploadError, openUploadFiles } from '../upload.js';
 import { configuredStore } from './auth.js';
 import type { Io, Values } from './types.js';
 
@@ -27,10 +28,34 @@ export async function list(rawKey: string | undefined, values: Values, io: Io, s
     return 0;
   }
   if (attachments.length === 0) io.out(values.filter ? `${key}: no matching attachments.` : `${key} has no attachments.`);
-  for (const a of attachments) {
-    io.out(`${a.id}\t${formatSize(a.size)}\t${printable(a.mimeType)}\t${printable(a.filename)}`);
-  }
+  for (const a of attachments) io.out(attachmentRow(a));
   return 0;
+}
+
+export async function upload(
+  rawKey: string | undefined,
+  paths: string[],
+  values: Values,
+  io: Io,
+  stores: CredentialStores,
+): Promise<number> {
+  const key = String(rawKey ?? '').toUpperCase();
+  assertIssueKey(key);
+  const files = await openUploadFiles(paths);
+  const client = await authenticatedClient(stores);
+  const created = await client.uploadAttachments(key, files).catch((error: unknown) => {
+    throw explainUploadError(error, key);
+  });
+  if (values.json) {
+    io.out(JSON.stringify(created, null, 2));
+    return 0;
+  }
+  for (const a of created) io.out(attachmentRow(a));
+  return 0;
+}
+
+function attachmentRow(a: Attachment): string {
+  return `${a.id}\t${formatSize(a.size)}\t${printable(a.mimeType)}\t${printable(a.filename)}`;
 }
 
 export async function get(rawKey: string | undefined, values: Values, io: Io, stores: CredentialStores): Promise<number> {
