@@ -50,7 +50,8 @@ test('names a path that is not a regular file', async () => {
   await assert.rejects(openUploadFiles([sub]), new RegExp(`Not a regular file: ${sub}`));
 });
 
-const httpError = (status: number) => new HttpError('POST', status, new URL('https://acme.atlassian.net/rest/api/3/issue/PROJ-1/attachments'));
+const httpError = (status: number, detail?: string) =>
+  new HttpError('POST', status, new URL('https://acme.atlassian.net/rest/api/3/issue/PROJ-1/attachments'), detail);
 
 test('explains the documented upload failures', () => {
   const cases: [number, RegExp][] = [
@@ -66,9 +67,23 @@ test('explains the documented upload failures', () => {
   }
 });
 
+test('explains a 401 caused by a token without the write scope', () => {
+  const error = explainUploadError(httpError(401, 'Unauthorized; scope does not match'), 'PROJ-1');
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /^Upload failed: the API token lacks the write:jira-work scope/);
+  assert.match(error.message, /HTTP 401: Unauthorized; scope does not match\)$/);
+});
+
+test('explains a 401 without a scope hint as a rejected token', () => {
+  const error = explainUploadError(httpError(401), 'PROJ-1');
+  assert.ok(error instanceof Error);
+  assert.match(error.message, /^Upload failed: the API token was rejected \(expired, revoked, or missing write:jira-work\)/);
+  assert.match(error.message, /jat auth login/);
+});
+
 test('passes other errors through unchanged', () => {
-  const unauthorized = httpError(401);
+  const serverError = httpError(500);
   const network = new Error('socket hang up');
-  assert.equal(explainUploadError(unauthorized, 'PROJ-1'), unauthorized);
+  assert.equal(explainUploadError(serverError, 'PROJ-1'), serverError);
   assert.equal(explainUploadError(network, 'PROJ-1'), network);
 });

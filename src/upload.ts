@@ -5,7 +5,13 @@ import { HttpError, type UploadFile } from './jira-client.js';
 
 export const MAX_FILES_PER_REQUEST = 60;
 
-const UPLOAD_ERROR_CAUSES: Record<number, (key: string) => string> = {
+const UPLOAD_ERROR_CAUSES: Record<number, (key: string, detail?: string) => string> = {
+  401: (key, detail) =>
+    /scope/i.test(detail ?? '')
+      ? `the API token lacks the write:jira-work scope needed to attach files to ${key}. ` +
+        'Create a token with it and run jat auth login.'
+      : 'the API token was rejected (expired, revoked, or missing write:jira-work). ' +
+        'Create a new token and run jat auth login.',
   403: (key) =>
     `no permission to attach files to ${key}. The account needs the Browse Projects and Create attachments ` +
     'permissions, and a scoped API token needs write:jira-work (or write:attachment:jira).',
@@ -30,5 +36,5 @@ export async function openUploadFiles(paths: string[]): Promise<UploadFile[]> {
 export function explainUploadError(error: unknown, key: string): unknown {
   if (!(error instanceof HttpError)) return error;
   const cause = UPLOAD_ERROR_CAUSES[error.status];
-  return cause ? new Error(`Upload failed: ${cause(key)} (${error.message})`) : error;
+  return cause ? new Error(`Upload failed: ${cause(key, error.detail)} (${error.message})`) : error;
 }

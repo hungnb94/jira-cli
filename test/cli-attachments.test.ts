@@ -171,12 +171,12 @@ const CREATED = [
   { id: '21', filename: 'b.png', size: 4, mimeType: 'image/png', created: '2026-01-03T00:00:00.000Z', self: 'y' },
 ];
 
-function stubUpload(status = 200): Request[] {
+function stubUpload(status = 200, errorBody?: object): Request[] {
   const requests: Request[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     requests.push(request);
-    if (status !== 200) return new Response(null, { status });
+    if (status !== 200) return errorBody ? Response.json(errorBody, { status }) : new Response(null, { status });
     return Response.json(CREATED);
   }) as typeof fetch;
   return requests;
@@ -222,6 +222,14 @@ test('upload explains a 403 from Jira', async () => {
   const result = await run(['upload', 'PROJ-1', ...(await uploadFiles())], await loggedIn());
   assert.equal(result.code, 1);
   assert.match(result.err, /^jat: Upload failed: no permission to attach files to PROJ-1\. .*HTTP 403\)\n$/);
+});
+
+test('upload explains a gateway 401 caused by a read-only token', async () => {
+  stubUpload(401, { code: 401, message: 'Unauthorized; scope does not match' });
+  const result = await run(['upload', 'PROJ-1', ...(await uploadFiles())], await loggedIn());
+  assert.equal(result.code, 1);
+  assert.match(result.err, /^jat: Upload failed: the API token lacks the write:jira-work scope needed to attach files to PROJ-1\./);
+  assert.match(result.err, /HTTP 401: Unauthorized; scope does not match\)\n$/);
 });
 
 test('upload needs files and a valid key', async () => {
