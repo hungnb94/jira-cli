@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
-import { parseArgs, type ParseArgsConfig } from 'node:util';
+import { parseArgs } from 'node:util';
+import { OPTIONS, type Io, type Values } from './commands/types.js';
 import { configPath, loadConfig, saveConfig, type Config } from './config.js';
 import { downloadAttachments, selectAttachments, type DownloadResult } from './download.js';
 import { errorMessage } from './error-info.js';
@@ -35,27 +36,8 @@ Add the agent skill (Claude Code, Cursor, Codex …): npx skills add hungnb94/ji
 
 const SKILL_HINT = 'Tip: add the agent skill with: npx skills add hungnb94/jira-cli --skill jira-attachments';
 
-const OPTIONS = {
-  site: { type: 'string' },
-  email: { type: 'string' },
-  'allow-silent-read': { type: 'boolean', default: false },
-  out: { type: 'string' },
-  filter: { type: 'string' },
-  'max-size': { type: 'string' },
-  json: { type: 'boolean', default: false },
-  help: { type: 'boolean', short: 'h', default: false },
-  version: { type: 'boolean', short: 'V', default: false },
-} as const satisfies ParseArgsConfig['options'];
-
-type Values = ReturnType<typeof parse>['values'];
-
 interface TextSink {
   write(text: string): unknown;
-}
-
-interface Io {
-  out(line: string): void;
-  err(line: string): void;
 }
 
 export interface MainOptions {
