@@ -15,6 +15,7 @@ export function printResults(key: string, results: DownloadResult[], io: Io): vo
 export function formatSize(bytes: number): string {
   if (!Number.isFinite(bytes)) return '?';
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  const kb = (bytes / 1024).toFixed(1);
+  if (Number(kb) < 1024) return `${kb} KB`;
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
