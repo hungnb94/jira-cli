@@ -36,6 +36,11 @@ test('macOS uses the Keychain only', () => {
   assert.deepEqual(stores.candidates().map((s) => s.id), ['keychain']);
 });
 
+test('Linux prefers the Secret Service keyring and falls back to a file', () => {
+  const stores = createStores({ platform: 'linux', run: fakeRun(() => ({})).run, dir: '/tmp/jat' });
+  assert.deepEqual(stores.candidates().map((s) => s.id), ['secret-service', 'file']);
+});
+
 test('rejects unknown platforms and store ids', () => {
   const stores = createStores({ platform: 'aix', run: fakeRun(() => ({})).run, dir: '/tmp/jat' });
   assert.throws(() => stores.candidates(), /Unsupported platform: aix/);

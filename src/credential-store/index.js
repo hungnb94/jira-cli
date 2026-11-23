@@ -1,14 +1,19 @@
 import { dirname } from 'node:path';
 import { configPath } from '../config.js';
+import { createFileStore } from './file.js';
 import { createKeychainStore } from './keychain.js';
 import { runTool } from './run.js';
+import { createSecretServiceStore } from './secret-service.js';
 
 const BACKENDS = {
   keychain: createKeychainStore,
+  'secret-service': createSecretServiceStore,
+  file: createFileStore,
 };
 
 const CANDIDATES_BY_PLATFORM = {
   darwin: ['keychain'],
+  linux: ['secret-service', 'file'],
 };
 
 export function createStores({ platform = process.platform, run = runTool, dir = dirname(configPath()), env = process.env } = {}) {
