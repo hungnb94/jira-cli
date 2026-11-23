@@ -138,7 +138,7 @@ export function formatReport(base, version, suggestion, result) {
       : `- Suggested bump: **${suggestion.bump}** to \`${nextVersion(base, suggestion.bump)}\` (${suggestion.reason})`,
   ]
   if (result.ok) {
-    lines.push(result.release ? `- On merge: release \`${version}\`` : '- On merge: no release')
+    lines.push(result.release ? `- On merge: publish \`${version}\` to npm` : '- On merge: no release')
   }
   for (const error of result.errors) lines.push(`- :x: ${error}`)
   for (const warning of result.warnings) lines.push(`- :warning: ${warning}`)

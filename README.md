@@ -13,11 +13,12 @@ Download Jira Cloud attachments without exposing the API token. Zero runtime dep
 ## Setup
 
 ```bash
-npm test
-ln -s "$PWD/bin/jat.js" ~/bin/jat
-ln -s "$PWD/skills/jira-attachments" ~/.claude/skills/jira-attachments
+npm install -g @hungnb94/jat
+ln -s "$(npm root -g)/@hungnb94/jat/skills/jira-attachments" ~/.claude/skills/jira-attachments
 jat auth login --site your-site.atlassian.net --email you@company.com
 ```
+
+From a clone instead: `npm test`, then `ln -s "$PWD/bin/jat.js" ~/bin/jat` and link `skills/jira-attachments` the same way.
 
 Create the token at https://id.atlassian.com/manage-profile/security/api-tokens. Prefer a scoped token (`read:jira-work`, `read:jira-user`) with an expiry date. Login checks the site URL first and falls back to the `api.atlassian.com` gateway that scoped tokens require.
 
@@ -34,3 +35,4 @@ jat get PROJ-5140 --filter mp4 --out ~/Downloads/PROJ-5140 --json
 - PR titles follow Conventional Commits (`feat:`, `fix:`, `docs:` …); CI checks this.
 - A PR that changes behaviour bumps `version` itself: `npm version <patch|minor|major> --no-git-tag-version` (`feat` → minor, `fix`/`perf`/`refactor`/`revert` → patch, `!` or `BREAKING CHANGE` → major). `docs`/`chore`/`ci`/`test`/`style`/`build` PRs, or PRs labelled `skip-release`, keep it. The Version Check workflow posts the suggested bump on the PR.
 - CI runs `npm test` on Ubuntu and macOS with Node 20, 22 and 24, and scans for secrets with Gitleaks.
+- Merging to `main` publishes the new version to npm (trusted publishing, no token), then tags it and creates a GitHub Release. Re-run the Release workflow by hand to retry a failed release.
