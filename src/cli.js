@@ -63,7 +63,9 @@ async function login(values, io) {
   if (!token) throw new Error('Empty token');
 
   const { apiBase, user } = await resolveApiBase(site, email, token);
+  const previous = await loadConfig(configPath());
   await storeToken(email, token, { promptOnRead: !values['allow-silent-read'] });
+  if (previous?.email && previous.email !== email) await deleteToken(previous.email).catch(() => {});
   await saveConfig(configPath(), { site, email, apiBase });
   io.out(`Logged in as ${printable(user.displayName ?? email)} via ${apiBase}`);
   return 0;
@@ -80,6 +82,7 @@ async function resolveApiBase(site, email, token) {
   const tenant = await fetch(`https://${site}/_edge/tenant_info`, { redirect: 'error' });
   if (!tenant.ok) throw new Error(`Could not resolve cloudId for ${site} (HTTP ${tenant.status})`);
   const { cloudId } = await tenant.json();
+  if (typeof cloudId !== 'string' || !cloudId) throw new Error(`Could not resolve cloudId for ${site}`);
   const gateway = `https://api.atlassian.com/ex/jira/${encodeURIComponent(cloudId)}`;
   try {
     return { apiBase: gateway, user: await new JiraClient({ apiBase: gateway, email, token }).myself() };
@@ -120,23 +123,25 @@ async function authenticatedClient() {
   return new JiraClient({ apiBase: config.apiBase, email: config.email, token });
 }
 
-async function list(key, values, io) {
-  assertIssueKey(key ?? '');
+async function list(rawKey, values, io) {
+  const key = String(rawKey ?? '').toUpperCase();
+  assertIssueKey(key);
   const client = await authenticatedClient();
   const attachments = selectAttachments(await client.listAttachments(key), values.filter);
   if (values.json) {
     io.out(JSON.stringify(attachments, null, 2));
     return 0;
   }
-  if (attachments.length === 0) io.out(`${key} has no attachments.`);
+  if (attachments.length === 0) io.out(values.filter ? `${key}: no matching attachments.` : `${key} has no attachments.`);
   for (const a of attachments) {
     io.out(`${a.id}\t${formatSize(a.size)}\t${printable(a.mimeType)}\t${printable(a.filename)}`);
   }
   return 0;
 }
 
-async function get(key, values, io) {
-  assertIssueKey(key ?? '');
+async function get(rawKey, values, io) {
+  const key = String(rawKey ?? '').toUpperCase();
+  assertIssueKey(key);
   const maxMb = Number(values['max-size'] ?? DEFAULT_MAX_MB);
   if (!Number.isFinite(maxMb) || maxMb <= 0) throw new Error('--max-size must be a positive number of MB');
   const outDir = resolve(values.out ?? key);
