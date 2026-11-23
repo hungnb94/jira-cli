@@ -18,7 +18,7 @@ export async function readErrorDetail(response: Response): Promise<string | unde
   if (text === undefined) return undefined;
   try {
     const messages = messagesOf(JSON.parse(text) as JiraErrorBody);
-    return messages.length > 0 ? printable(messages.join('; ')).slice(0, MAX_DETAIL_CHARS) : undefined;
+    return messages.length > 0 ? Array.from(printable(messages.join('; '))).slice(0, MAX_DETAIL_CHARS).join('') : undefined;
   } catch {
     return undefined;
   }
