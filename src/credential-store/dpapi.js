@@ -45,7 +45,9 @@ export function createDpapiStore({ run, dir, env }) {
       const { code, stdout } = await runScript(UNPROTECT, blob);
       const token = stdout.trim();
       if (code !== 0 || !token) {
-        throw new Error('Could not decrypt the token; it only works for the Windows user who ran jat auth login. Run: jat auth login');
+        throw new Error(
+          `Could not decrypt the token (PowerShell exit ${code}); it only works for the Windows user who ran jat auth login. Run: jat auth login`,
+        );
       }
       return token;
     },
