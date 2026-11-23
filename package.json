@@ -1,16 +1,44 @@
 {
-  "name": "jat",
-  "version": "0.1.0",
+  "name": "@hungnb94/jat",
+  "version": "0.2.0",
   "description": "Download Jira Cloud attachments with the API token kept in the macOS Keychain",
-  "private": true,
   "type": "module",
   "bin": {
     "jat": "bin/jat.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "skills"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
   "engines": {
     "node": ">=20"
   },
-  "scripts": {
-    "test": "node --test"
+  "os": [
+    "darwin"
+  ],
+  "keywords": [
+    "jira",
+    "atlassian",
+    "attachments",
+    "cli",
+    "keychain",
+    "claude-code"
+  ],
+  "author": "hungnb94",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hungnb94/jira-cli.git"
+  },
+  "homepage": "https://github.com/hungnb94/jira-cli#readme",
+  "bugs": {
+    "url": "https://github.com/hungnb94/jira-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
