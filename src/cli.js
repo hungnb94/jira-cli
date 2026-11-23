@@ -4,7 +4,7 @@ import { configPath, loadConfig, saveConfig } from './config.js';
 import { downloadAttachments, selectAttachments } from './download.js';
 import { promptHidden } from './hidden-input.js';
 import { HttpError, JiraClient, assertIssueKey } from './jira-client.js';
-import { deleteToken, hasToken, readToken, storeToken } from './keychain.js';
+import { createStores } from './credential-store/index.js';
 import { printable } from './safe-name.js';
 
 const DEFAULT_MAX_MB = 200;
@@ -31,7 +31,7 @@ const OPTIONS = {
   help: { type: 'boolean', short: 'h', default: false },
 };
 
-export async function main(argv, { stdout = process.stdout, stderr = process.stderr } = {}) {
+export async function main(argv, { stdout = process.stdout, stderr = process.stderr, stores } = {}) {
   const io = { out: (line) => stdout.write(`${line}\n`), err: (line) => stderr.write(`${line}\n`) };
   try {
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
@@ -40,11 +40,12 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       io.out(USAGE);
       return 0;
     }
-    if (command === 'auth' && sub === 'login') return await login(values, io);
-    if (command === 'auth' && sub === 'status') return await status(io);
-    if (command === 'auth' && sub === 'logout') return await logout(io);
-    if (command === 'list') return await list(sub, values, io);
-    if (command === 'get') return await get(sub, values, io);
+    const credentials = stores ?? createStores();
+    if (command === 'auth' && sub === 'login') return await login(values, io, credentials);
+    if (command === 'auth' && sub === 'status') return await status(io, credentials);
+    if (command === 'auth' && sub === 'logout') return await logout(io, credentials);
+    if (command === 'list') return await list(sub, values, io, credentials);
+    if (command === 'get') return await get(sub, values, io, credentials);
     io.err(USAGE);
     return 2;
   } catch (error) {
@@ -53,7 +54,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   }
 }
 
-async function login(values, io) {
+async function login(values, io, stores) {
   const site = String(values.site ?? '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
   const email = String(values.email ?? '').trim();
   if (!SITE.test(site)) throw new Error('--site must look like <name>.atlassian.net');
@@ -64,8 +65,9 @@ async function login(values, io) {
 
   const { apiBase, user } = await resolveApiBase(site, email, token);
   const previous = await loadConfig(configPath());
-  await storeToken(email, token, { promptOnRead: !values['allow-silent-read'] });
-  if (previous?.email && previous.email !== email) await deleteToken(previous.email).catch(() => {});
+  const [store] = stores.candidates();
+  await store.store(email, token, { promptOnRead: !values['allow-silent-read'] });
+  if (previous?.email && previous.email !== email) await store.delete(previous.email).catch(() => {});
   await saveConfig(configPath(), { site, email, apiBase });
   io.out(`Logged in as ${printable(user.displayName ?? email)} via ${apiBase}`);
   return 0;
@@ -94,39 +96,39 @@ async function resolveApiBase(site, email, token) {
   }
 }
 
-async function status(io) {
+async function status(io, stores) {
   const config = await loadConfig(configPath());
   if (!config) {
     io.out('Not logged in.');
     return 1;
   }
-  const stored = await hasToken(config.email);
+  const stored = await stores.byId('keychain').has(config.email);
   io.out(`site: ${config.site}\nemail: ${config.email}\napi: ${config.apiBase}\ntoken in Keychain: ${stored ? 'yes' : 'no'}`);
   return stored ? 0 : 1;
 }
 
-async function logout(io) {
+async function logout(io, stores) {
   const config = await loadConfig(configPath());
   if (!config) {
     io.out('Not logged in.');
     return 0;
   }
-  const removed = await deleteToken(config.email);
+  const removed = await stores.byId('keychain').delete(config.email);
   io.out(removed ? 'Token removed from Keychain.' : 'No token was stored.');
   return 0;
 }
 
-async function authenticatedClient() {
+async function authenticatedClient(stores) {
   const config = await loadConfig(configPath());
   if (!config) throw new Error('Not logged in. Run: jat auth login --site <name>.atlassian.net --email <email>');
-  const token = await readToken(config.email);
+  const token = await stores.byId('keychain').read(config.email);
   return new JiraClient({ apiBase: config.apiBase, email: config.email, token });
 }
 
-async function list(rawKey, values, io) {
+async function list(rawKey, values, io, stores) {
   const key = String(rawKey ?? '').toUpperCase();
   assertIssueKey(key);
-  const client = await authenticatedClient();
+  const client = await authenticatedClient(stores);
   const attachments = selectAttachments(await client.listAttachments(key), values.filter);
   if (values.json) {
     io.out(JSON.stringify(attachments, null, 2));
@@ -139,13 +141,13 @@ async function list(rawKey, values, io) {
   return 0;
 }
 
-async function get(rawKey, values, io) {
+async function get(rawKey, values, io, stores) {
   const key = String(rawKey ?? '').toUpperCase();
   assertIssueKey(key);
   const maxMb = Number(values['max-size'] ?? DEFAULT_MAX_MB);
   if (!Number.isFinite(maxMb) || maxMb <= 0) throw new Error('--max-size must be a positive number of MB');
   const outDir = resolve(values.out ?? key);
-  const client = await authenticatedClient();
+  const client = await authenticatedClient(stores);
   const results = await downloadAttachments(client, key, {
     outDir,
     filter: values.filter,
