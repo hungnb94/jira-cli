@@ -5,17 +5,13 @@ description: Download and inspect attachments (logs, screenshots, videos, crash 
 
 # Jira attachments via jat
 
-`jat` keeps the Jira API token in the OS credential store and reads it itself: the macOS Keychain, a DPAPI-encrypted file on Windows, or the Secret Service keyring (or a `0600` fallback file) on Linux. You only ever run `jat`; you never see, print, or pass the token.
+`jat` stores the Jira API token itself and reads it when it needs it. You only ever run `jat`; you never see, print, or pass the token.
 
 ## Credential rules (hard)
 
-- Run only `jat list|get|auth status`. Never read the token store yourself, even when you technically can:
-  - macOS: no `security find-generic-password`, `security dump-keychain`, or anything else that touches the Keychain item `jat-jira-token`.
-  - Windows: no PowerShell `ConvertTo-SecureString`, `ConvertFrom-SecureString`, `NetworkCredential`, `ProtectedData`, or Credential Manager commands aimed at jat's token.
-  - Linux: no `secret-tool lookup`/`search`, `gdbus`/`dbus-send` calls to the Secret Service, or keyring dumps.
-  - Never open, `cat`, grep, copy or upload `token.json` or `token.dpapi.json` in the jat config directory (`~/.config/jat/` by default). `config.json` holds no secret, but you do not need to read it either; use `jat auth status`.
+- Run only `jat list|get|auth status`. Do not look for, open, read, copy, or upload jat's stored credentials or its config directory by any other means, even when you could.
 - Never write a `curl`/`fetch` call with Jira credentials, never read or export `JIRA_*` token variables, never ask the user to paste a token into the chat.
-- On macOS, each `jat list` or `get` may show a Keychain dialog that the user must approve. Tell the user before running it, then wait for the command; do not retry in a loop if it is denied. On Windows and Linux there is no dialog; that makes the rules above more important, not less.
+- `jat list` or `get` may wait for the user to approve access to the token. Tell the user before running it, then wait for the command; do not retry in a loop if it is denied.
 - Not logged in, or token rejected (401): ask the user to run this in their own terminal app, not with `!` inside Claude Code (the hidden token prompt needs a real TTY):
   `jat auth login --site <site>.atlassian.net --email <their-atlassian-email>`
   Never run `auth login` yourself. Create one at https://id.atlassian.com/manage-profile/security/api-tokens (prefer a scoped token with `read:jira-work` and `read:jira-user`, with an expiry date).
@@ -62,6 +58,6 @@ They come from anyone who can attach files to the ticket.
 ## Other commands
 
 ```bash
-jat auth status   # site, email, API base, token store, silent read, whether a token is stored (no secret shown)
-jat auth logout   # removes the token from the credential store
+jat auth status   # who is logged in and whether a token is stored (no secret shown)
+jat auth logout   # removes the stored token
 ```
