@@ -29,3 +29,19 @@ export function createStores({ platform = process.platform, run = runTool, dir =
     },
   };
 }
+
+export const LEGACY_STORE = 'keychain';
+
+export async function storeWithFallback(candidates, account, token, options) {
+  const skipped = [];
+  for (const store of candidates) {
+    try {
+      await store.store(account, token, options);
+      return { store, skipped };
+    } catch (error) {
+      skipped.push({ store, reason: error.message });
+    }
+  }
+  const reasons = skipped.map(({ store, reason }) => `${store.label}: ${reason}`).join('; ');
+  throw new Error(`Could not store the token (${reasons})`);
+}

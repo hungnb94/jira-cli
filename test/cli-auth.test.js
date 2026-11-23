@@ -49,6 +49,8 @@ test('status reports whether the token is stored', async () => {
   const result = await run(['auth', 'status'], fakeStores([keychain]));
   assert.equal(result.code, 0);
   assert.match(result.out, /site: acme\.atlassian\.net/);
+  assert.match(result.out, /token store: Fake keychain/);
+  assert.match(result.out, /token stored: yes/);
   assert.doesNotMatch(result.out + result.err, /secret-token/);
 });
 
@@ -60,4 +62,39 @@ test('logout removes the token', async () => {
   assert.equal(result.code, 0);
   assert.equal(keychain.tokens.size, 0);
   assert.ok(await loadConfig(process.env.JAT_CONFIG));
+});
+
+test('a config from 0.2.0 without a store id uses the Keychain', async () => {
+  const keychain = fakeStore('keychain');
+  const file = fakeStore('file');
+  keychain.tokens.set(CONFIG.email, 'secret-token');
+  await saveConfig(process.env.JAT_CONFIG, CONFIG);
+  const result = await run(['auth', 'status'], fakeStores([file, keychain]));
+  assert.equal(result.code, 0);
+  assert.match(result.out, /token store: Fake keychain/);
+  assert.doesNotMatch(result.out, /silent read/);
+});
+
+test('status and logout use the store recorded at login', async () => {
+  const keyring = fakeStore('secret-service');
+  const file = fakeStore('file');
+  file.tokens.set(CONFIG.email, 'secret-token');
+  await saveConfig(process.env.JAT_CONFIG, { ...CONFIG, store: 'file', silentRead: true });
+  const status = await run(['auth', 'status'], fakeStores([keyring, file]));
+  assert.match(status.out, /token store: Fake file\nsilent read: yes\ntoken stored: yes/);
+  const logout = await run(['auth', 'logout'], fakeStores([keyring, file]));
+  assert.match(logout.out, /Token removed from Fake file\./);
+  assert.equal(file.tokens.size, 0);
+});
+
+test('an unknown recorded store is an error, not a silent fallback', async () => {
+  await saveConfig(process.env.JAT_CONFIG, { ...CONFIG, store: 'vault' });
+  const result = await run(['auth', 'status'], fakeStores([fakeStore('keychain')]));
+  assert.equal(result.code, 1);
+  assert.match(result.err, /Unknown credential store: vault/);
+});
+
+test('help mentions the agent skill install command', async () => {
+  const result = await run(['--help'], fakeStores([]));
+  assert.match(result.out, /npx skills add hungnb94\/jira-cli --skill jira-attachments/);
 });

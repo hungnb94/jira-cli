@@ -4,7 +4,7 @@ import { configPath, loadConfig, saveConfig } from './config.js';
 import { downloadAttachments, selectAttachments } from './download.js';
 import { promptHidden } from './hidden-input.js';
 import { HttpError, JiraClient, assertIssueKey } from './jira-client.js';
-import { createStores } from './credential-store/index.js';
+import { LEGACY_STORE, createStores, storeWithFallback } from './credential-store/index.js';
 import { printable } from './safe-name.js';
 
 const DEFAULT_MAX_MB = 200;
@@ -18,7 +18,13 @@ const USAGE = `Usage:
   jat list <KEY> [--json]
   jat get <KEY> [--out <dir>] [--filter <text>] [--max-size <MB>] [--json]
 
-The API token is read from a hidden prompt (or the first line of stdin) and stored only in the macOS Keychain.`;
+The API token is read from a hidden prompt (or the first line of stdin) and stored only in the OS credential
+store: macOS Keychain, a DPAPI-encrypted file on Windows, or the Secret Service keyring on Linux (with a 0600
+file as the fallback when no keyring is running).
+
+Add the agent skill (Claude Code, Cursor, Codex …): npx skills add hungnb94/jira-cli --skill jira-attachments`;
+
+const SKILL_HINT = 'Tip: add the agent skill with: npx skills add hungnb94/jira-cli --skill jira-attachments';
 
 const OPTIONS = {
   site: { type: 'string' },
@@ -65,12 +71,32 @@ async function login(values, io, stores) {
 
   const { apiBase, user } = await resolveApiBase(site, email, token);
   const previous = await loadConfig(configPath());
-  const [store] = stores.candidates();
-  await store.store(email, token, { promptOnRead: !values['allow-silent-read'] });
-  if (previous?.email && previous.email !== email) await store.delete(previous.email).catch(() => {});
-  await saveConfig(configPath(), { site, email, apiBase });
+  const promptOnRead = !values['allow-silent-read'];
+  const { store, skipped } = await storeWithFallback(stores.candidates(), email, token, { promptOnRead });
+  await removePreviousToken(previous, { email, store }, stores);
+  const silentRead = store.silentRead({ promptOnRead });
+  await saveConfig(configPath(), { site, email, apiBase, store: store.id, silentRead });
+  for (const { store: unavailable, reason } of skipped) {
+    io.err(`warning: ${unavailable.label} is not available (${reason}); stored the token in ${store.label} instead.`);
+  }
+  if (silentRead) {
+    io.err(`warning: any program running as your user can read the token from ${store.label} without asking you.`);
+  }
   io.out(`Logged in as ${printable(user.displayName ?? email)} via ${apiBase}`);
+  io.out(`Token stored in ${store.label}.`);
+  io.out(SKILL_HINT);
   return 0;
+}
+
+async function removePreviousToken(previous, current, stores) {
+  if (!previous?.email) return;
+  const previousStoreId = previous.store ?? LEGACY_STORE;
+  if (previous.email === current.email && previousStoreId === current.store.id) return;
+  try {
+    await stores.byId(previousStoreId).delete(previous.email);
+  } catch {
+    // The old token may already be gone or its store unreachable; the new login must still succeed.
+  }
 }
 
 // Classic API tokens work on the site URL; scoped tokens only work through the api.atlassian.com gateway.
@@ -102,8 +128,12 @@ async function status(io, stores) {
     io.out('Not logged in.');
     return 1;
   }
-  const stored = await stores.byId('keychain').has(config.email);
-  io.out(`site: ${config.site}\nemail: ${config.email}\napi: ${config.apiBase}\ntoken in Keychain: ${stored ? 'yes' : 'no'}`);
+  const store = configuredStore(config, stores);
+  const stored = await store.has(config.email);
+  const lines = [`site: ${config.site}`, `email: ${config.email}`, `api: ${config.apiBase}`, `token store: ${store.label}`];
+  if (typeof config.silentRead === 'boolean') lines.push(`silent read: ${config.silentRead ? 'yes' : 'no'}`);
+  lines.push(`token stored: ${stored ? 'yes' : 'no'}`);
+  io.out(lines.join('\n'));
   return stored ? 0 : 1;
 }
 
@@ -113,16 +143,21 @@ async function logout(io, stores) {
     io.out('Not logged in.');
     return 0;
   }
-  const removed = await stores.byId('keychain').delete(config.email);
-  io.out(removed ? 'Token removed from Keychain.' : 'No token was stored.');
+  const store = configuredStore(config, stores);
+  const removed = await store.delete(config.email);
+  io.out(removed ? `Token removed from ${store.label}.` : 'No token was stored.');
   return 0;
 }
 
 async function authenticatedClient(stores) {
   const config = await loadConfig(configPath());
   if (!config) throw new Error('Not logged in. Run: jat auth login --site <name>.atlassian.net --email <email>');
-  const token = await stores.byId('keychain').read(config.email);
+  const token = await configuredStore(config, stores).read(config.email);
   return new JiraClient({ apiBase: config.apiBase, email: config.email, token });
+}
+
+function configuredStore(config, stores) {
+  return stores.byId(config.store ?? LEGACY_STORE);
 }
 
 async function list(rawKey, values, io, stores) {
