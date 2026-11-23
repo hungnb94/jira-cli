@@ -41,6 +41,11 @@ test('Linux prefers the Secret Service keyring and falls back to a file', () => 
   assert.deepEqual(stores.candidates().map((s) => s.id), ['secret-service', 'file']);
 });
 
+test('Windows uses the DPAPI-encrypted file', () => {
+  const stores = createStores({ platform: 'win32', run: fakeRun(() => ({})).run, dir: '/tmp/jat', env: {} });
+  assert.deepEqual(stores.candidates().map((s) => s.id), ['dpapi']);
+});
+
 test('rejects unknown platforms and store ids', () => {
   const stores = createStores({ platform: 'aix', run: fakeRun(() => ({})).run, dir: '/tmp/jat' });
   assert.throws(() => stores.candidates(), /Unsupported platform: aix/);

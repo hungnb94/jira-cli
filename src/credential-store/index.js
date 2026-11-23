@@ -1,5 +1,6 @@
 import { dirname } from 'node:path';
 import { configPath } from '../config.js';
+import { createDpapiStore } from './dpapi.js';
 import { createFileStore } from './file.js';
 import { createKeychainStore } from './keychain.js';
 import { runTool } from './run.js';
@@ -9,11 +10,13 @@ const BACKENDS = {
   keychain: createKeychainStore,
   'secret-service': createSecretServiceStore,
   file: createFileStore,
+  dpapi: createDpapiStore,
 };
 
 const CANDIDATES_BY_PLATFORM = {
   darwin: ['keychain'],
   linux: ['secret-service', 'file'],
+  win32: ['dpapi'],
 };
 
 export function createStores({ platform = process.platform, run = runTool, dir = dirname(configPath()), env = process.env } = {}) {
