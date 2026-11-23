@@ -1,0 +1,4 @@
+node_modules/
+.DS_Store
+# Downloaded attachments land in ./<ISSUE-KEY>/ by default and may contain private data.
+/[A-Z]*-[0-9]*/
