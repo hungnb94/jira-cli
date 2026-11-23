@@ -48,7 +48,10 @@ export async function storeToken(account, token, { promptOnRead = true } = {}) {
   assertSafe('account', account);
   assertSafe('token', token);
   const trust = promptOnRead ? ' -T ""' : '';
-  const command = `add-generic-password -U -s "${SERVICE}" -a "${account}"${trust} -w "${token}"\n`;
+  // Delete any existing item first: `-U` keeps the old item's access list, so a switch between
+  // prompting and --allow-silent-read would not apply, and a failed update would leave the old token.
+  await deleteToken(account);
+  const command = `add-generic-password -s "${SERVICE}" -a "${account}"${trust} -w "${token}"\n`;
   await new Promise((resolve, reject) => {
     const child = spawn(SECURITY, ['-i'], { stdio: ['pipe', 'ignore', 'ignore'] });
     child.on('error', reject);
