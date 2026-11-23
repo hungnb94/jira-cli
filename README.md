@@ -29,7 +29,22 @@ jat auth login --site your-site.atlassian.net --email you@company.com
 
 The jat config directory is `$XDG_CONFIG_HOME/jat/` or `~/.config/jat/`. `JAT_CONFIG` moves only `config.json`; token files always stay in the jat config directory, so they never end up in a project folder. On Linux, install `secret-tool` first (`libsecret-tools` on Debian/Ubuntu) to keep the token in the keyring instead of a file.
 
-Create the token at https://id.atlassian.com/manage-profile/security/api-tokens. Prefer a scoped token (`read:jira-work`, `read:jira-user`) with an expiry date. `jat upload` also needs `write:jira-work` (or `write:attachment:jira`), plus the *Browse Projects* and *Create attachments* project permissions; a read-only token gets HTTP 403. Login checks the site URL first and falls back to the `api.atlassian.com` gateway that scoped tokens require.
+### API token
+
+Prefer a scoped token with an expiry date:
+
+1. Open https://id.atlassian.com/manage-profile/security/api-tokens and choose **Create API token with scopes**.
+2. Give it a name and an expiry date, and pick **Jira** as the app.
+3. Pick the scopes for the commands you need:
+
+   | Commands | Scopes |
+   |---|---|
+   | `jat list`, `jat get` | `read:jira-work`, `read:jira-user` |
+   | `jat upload` | also `write:jira-work` (or the granular `write:attachment:jira`) |
+
+4. Copy the token and run `jat auth login`. To add scopes later, create a new token and log in again; the old one is replaced.
+
+Login checks the site URL first and falls back to the `api.atlassian.com` gateway that scoped tokens require. Through the gateway, a token without the scope for a call gets **HTTP 401**, not 403, so a read-only token can list and download but `jat upload` fails with 401. Uploading also needs the *Browse Projects* and *Create attachments* permissions in the project.
 
 ### Agent skill
 
