@@ -110,8 +110,9 @@ export class JiraClient {
     const created = (await this.#requestJson('POST', `/rest/api/3/issue/${key}/attachments`, {
       body: form,
       headers: { 'X-Atlassian-Token': 'no-check' },
-    })) as RawAttachment[];
-    return created.map(toAttachment);
+    })) as unknown;
+    if (!Array.isArray(created)) throw new Error(`Unexpected upload response from Jira for ${key}`);
+    return (created as RawAttachment[]).map(toAttachment);
   }
 
   // Follows redirects by hand: the content URL redirects to a signed media URL on another host,
