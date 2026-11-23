@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -72,4 +72,33 @@ test('writes traversal names inside the output directory only', async () => {
   const client = fakeClient([{ id: '1', filename: '../../escape.sh', size: 2 }], { 1: 'hi' });
   const [result] = await downloadAttachments(client, 'PROJ-1', { outDir, maxBytes: 10 });
   assert.equal(result.path, join(outDir, '1_escape.sh'));
+});
+
+test('replaces a stale .part file left by an interrupted run', async () => {
+  const outDir = await tempDir();
+  await writeFile(join(outDir, '1_a.txt.part'), 'trunc');
+  const client = fakeClient([{ id: '1', filename: 'a.txt', size: 4 }], { 1: 'full' });
+  const [result] = await downloadAttachments(client, 'PROJ-1', { outDir, maxBytes: 10 });
+  assert.equal(result.status, 'downloaded');
+  assert.equal(await readFile(result.path, 'utf8'), 'full');
+  assert.deepEqual(await readdir(outDir), ['1_a.txt']);
+});
+
+test('keeps going and reports failed when a file cannot be created', async () => {
+  const outDir = await tempDir();
+  await chmod(outDir, 0o500);
+  try {
+    const client = fakeClient(
+      [
+        { id: '1', filename: 'a.txt', size: 1 },
+        { id: '2', filename: 'b.txt', size: 1 },
+      ],
+      { 1: 'a', 2: 'b' },
+    );
+    const results = await downloadAttachments(client, 'PROJ-1', { outDir, maxBytes: 10 });
+    assert.deepEqual(results.map((r) => r.status), ['failed', 'failed']);
+    assert.match(results[0].reason, /EACCES/);
+  } finally {
+    await chmod(outDir, 0o700);
+  }
 });
