@@ -1,4 +1,4 @@
-import type { ParseArgsConfig, parseArgs } from 'node:util';
+import { parseArgs, type ParseArgsConfig } from 'node:util';
 
 export const OPTIONS = {
   site: { type: 'string' },
@@ -12,7 +12,12 @@ export const OPTIONS = {
   version: { type: 'boolean', short: 'V', default: false },
 } as const satisfies ParseArgsConfig['options'];
 
-export type Values = ReturnType<typeof parseArgs<{ options: typeof OPTIONS; allowPositionals: true }>>['values'];
+export function parse(argv: string[]) {
+  return parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
+}
+
+// Derived from the same parse() call main() uses, so the command handlers' type cannot drift from it.
+export type Values = ReturnType<typeof parse>['values'];
 
 export interface Io {
   out(line: string): void;

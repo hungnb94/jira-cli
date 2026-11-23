@@ -1,7 +1,6 @@
-import { parseArgs } from 'node:util';
 import { get, list } from './commands/attachments.js';
 import { login, logout, status } from './commands/auth.js';
-import { OPTIONS, type Io } from './commands/types.js';
+import { parse, type Io } from './commands/types.js';
 import { createStores, type CredentialStores } from './credential-store/index.js';
 import { errorMessage } from './error-info.js';
 import { packageVersion } from './version.js';
@@ -28,10 +27,6 @@ export interface MainOptions {
   stdout?: TextSink;
   stderr?: TextSink;
   stores?: CredentialStores;
-}
-
-function parse(argv: string[]) {
-  return parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
 }
 
 export async function main(
