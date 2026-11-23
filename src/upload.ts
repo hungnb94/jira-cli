@@ -1,6 +1,7 @@
 import { openAsBlob } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
+import { errorCode } from './error-info.js';
 import { HttpError, type UploadFile } from './jira-client.js';
 
 export const MAX_FILES_PER_REQUEST = 60;
@@ -26,7 +27,10 @@ export async function openUploadFiles(paths: string[]): Promise<UploadFile[]> {
     throw new Error(`Too many files: ${paths.length}. Jira accepts at most ${MAX_FILES_PER_REQUEST} per upload.`);
   }
   for (const path of paths) {
-    const info = await stat(path).catch(() => undefined);
+    const info = await stat(path).catch((error: unknown) => {
+      if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') return undefined;
+      throw new Error(`Cannot read ${path}: ${errorCode(error) ?? String(error)}`);
+    });
     if (!info) throw new Error(`File not found: ${path}`);
     if (!info.isFile()) throw new Error(`Not a regular file: ${path}`);
   }
