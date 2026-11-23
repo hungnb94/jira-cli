@@ -1,0 +1,16 @@
+{
+  "name": "jat",
+  "version": "0.1.0",
+  "description": "Download Jira Cloud attachments with the API token kept in the macOS Keychain",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "jat": "bin/jat.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
