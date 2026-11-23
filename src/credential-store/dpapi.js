@@ -1,6 +1,6 @@
 import { join, win32 } from 'node:path';
 import { assertSafe } from './account.js';
-import { readJsonFile, removeFile, replacePrivateJsonFile } from './json-file.js';
+import { createAccountFile } from './json-file.js';
 
 const POWERSHELL_TIMEOUT_MS = 30_000;
 const BLOB = /^[0-9a-f]+$/i;
@@ -19,6 +19,7 @@ const UNPROTECT = [
 
 export function createDpapiStore({ run, dir, env }) {
   const path = join(dir, 'token.dpapi.json');
+  const file = createAccountFile(path);
   const powershell = win32.join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
   function runScript(script, input) {
@@ -30,8 +31,8 @@ export function createDpapiStore({ run, dir, env }) {
 
   async function blobFor(account) {
     assertSafe('account', account);
-    const data = await readJsonFile(path);
-    return data?.account === account && typeof data.blob === 'string' && BLOB.test(data.blob) ? data.blob : null;
+    const blob = await file.get(account);
+    return blob && BLOB.test(blob) ? blob : null;
   }
 
   return {
@@ -62,13 +63,12 @@ export function createDpapiStore({ run, dir, env }) {
       const { code, stdout } = await runScript(PROTECT, token);
       const blob = stdout.trim();
       if (code !== 0 || !BLOB.test(blob)) throw new Error(`PowerShell could not encrypt the token (exit ${code})`);
-      await replacePrivateJsonFile(path, { account, blob });
+      await file.set(account, blob);
     },
 
     async delete(account) {
-      if (!(await blobFor(account))) return false;
-      await removeFile(path);
-      return true;
+      assertSafe('account', account);
+      return file.remove(account);
     },
   };
 }

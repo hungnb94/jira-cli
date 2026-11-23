@@ -61,3 +61,9 @@ test('rejects unknown platforms and store ids', () => {
   assert.throws(() => stores.candidates(), /Unsupported platform: aix/);
   assert.throws(() => stores.byId('toString'), /Unknown credential store: toString/);
 });
+
+test('token files go to the per-user config directory even when JAT_CONFIG points elsewhere', () => {
+  const env = { JAT_CONFIG: '/repo/jat.json', XDG_CONFIG_HOME: '/home/me/.config' };
+  const stores = createStores({ env, platform: 'linux', run: fakeRun(() => ({})).run });
+  assert.match(stores.byId('file').label, /^plaintext file \/home\/me\/\.config\/jat\/token\.json$/);
+});

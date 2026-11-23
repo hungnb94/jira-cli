@@ -1,14 +1,14 @@
 import { join } from 'node:path';
 import { assertSafe } from './account.js';
-import { readJsonFile, removeFile, replacePrivateJsonFile } from './json-file.js';
+import { createAccountFile } from './json-file.js';
 
 export function createFileStore({ dir }) {
   const path = join(dir, 'token.json');
+  const file = createAccountFile(path);
 
   async function tokenFor(account) {
     assertSafe('account', account);
-    const data = await readJsonFile(path);
-    return data?.account === account && typeof data.token === 'string' ? data.token : null;
+    return file.get(account);
   }
 
   return {
@@ -29,13 +29,12 @@ export function createFileStore({ dir }) {
     async store(account, token) {
       assertSafe('account', account);
       assertSafe('token', token);
-      await replacePrivateJsonFile(path, { account, token });
+      await file.set(account, token);
     },
 
     async delete(account) {
-      if (!(await tokenFor(account))) return false;
-      await removeFile(path);
-      return true;
+      assertSafe('account', account);
+      return file.remove(account);
     },
   };
 }

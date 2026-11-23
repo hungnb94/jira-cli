@@ -46,20 +46,20 @@ test('store fails when PowerShell does not return a blob', async () => {
 });
 
 test('read explains a blob that cannot be decrypted', async () => {
-  await writeFile(join(dir, 'token.dpapi.json'), JSON.stringify({ account: ACCOUNT, blob: '01000000d08c' }));
+  await writeFile(join(dir, 'token.dpapi.json'), JSON.stringify({ accounts: { [ACCOUNT]: '01000000d08c' } }));
   const { run } = fakeRun(() => ({ code: 1 }));
   await assert.rejects(createDpapiStore({ run, dir, env: ENV }).read(ACCOUNT), /only works for the Windows user/);
 });
 
-test('a blob for another account or with odd characters is ignored', async () => {
+test('a blob with odd characters is never passed to PowerShell', async () => {
   const { run, calls } = fakePowerShell();
   const store = createDpapiStore({ run, dir, env: ENV });
-  await writeFile(join(dir, 'token.dpapi.json'), JSON.stringify({ account: ACCOUNT, blob: '; Remove-Item' }));
+  await writeFile(join(dir, 'token.dpapi.json'), JSON.stringify({ accounts: { [ACCOUNT]: '; Remove-Item' } }));
   assert.equal(await store.has(ACCOUNT), false);
-  await store.store('other@example.com', 'other-token');
   await assert.rejects(store.read(ACCOUNT), /No token in/);
-  assert.equal(await store.delete(ACCOUNT), false);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 0);
+  await store.store('other@example.com', 'other-token');
+  assert.equal(await store.read('other@example.com'), 'other-token');
 });
 
 test('delete removes the file and reads are always silent', async () => {

@@ -9,9 +9,9 @@ Download Jira Cloud attachments without exposing the API token. Zero runtime dep
   | OS | Store | Silent read? |
   |---|---|---|
   | macOS | Keychain item `jat-jira-token` | No by default: the item trusts no application (`-T ""`), so every read shows a macOS dialog. `--allow-silent-read` removes the dialog, but then any process that runs `security` can read the token. |
-  | Windows | `token.dpapi.json` next to the config, encrypted with DPAPI for the current Windows user | Yes: any program running as your user can decrypt it. |
+  | Windows | `token.dpapi.json` in the jat config directory, encrypted with DPAPI for the current Windows user | Yes: any program running as your user can decrypt it. |
   | Linux | Secret Service keyring (GNOME Keyring, KWallet …) through `secret-tool` | Yes, once the keyring is unlocked. |
-  | Linux without a keyring (servers, WSL, no `libsecret-tools`) | `token.json` next to the config, plaintext, mode `0600` in a `0700` directory | Yes. Login warns when it falls back to this file. |
+  | Linux without a keyring (servers, WSL, no `libsecret-tools`) | `token.json` in the jat config directory, plaintext, mode `0600` in a `0700` directory | Yes. Login warns when it falls back to this file. |
 
   Only macOS can stop an AI agent or script from reading the token without you. On Windows and Linux, `--allow-silent-read` is accepted but changes nothing, and login always prints a warning.
 - Login records the store it used in the config, and every later command reads only from that store. `jat auth status` shows the store and whether reads are silent.
@@ -26,7 +26,7 @@ npm install -g @hungnb94/jat
 jat auth login --site your-site.atlassian.net --email you@company.com
 ```
 
-The config lives in `$XDG_CONFIG_HOME/jat/` or `~/.config/jat/` (override with `JAT_CONFIG`). On Linux, install `secret-tool` first (`libsecret-tools` on Debian/Ubuntu) to keep the token in the keyring instead of a file.
+The jat config directory is `$XDG_CONFIG_HOME/jat/` or `~/.config/jat/`. `JAT_CONFIG` moves only `config.json`; token files always stay in the jat config directory, so they never end up in a project folder. On Linux, install `secret-tool` first (`libsecret-tools` on Debian/Ubuntu) to keep the token in the keyring instead of a file.
 
 Create the token at https://id.atlassian.com/manage-profile/security/api-tokens. Prefer a scoped token (`read:jira-work`, `read:jira-user`) with an expiry date. Login checks the site URL first and falls back to the `api.atlassian.com` gateway that scoped tokens require.
 

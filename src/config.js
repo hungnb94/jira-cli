@@ -2,10 +2,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+export function configDir(env = process.env) {
+  return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'jat');
+}
+
 export function configPath(env = process.env) {
-  if (env.JAT_CONFIG) return env.JAT_CONFIG;
-  const base = env.XDG_CONFIG_HOME || join(homedir(), '.config');
-  return join(base, 'jat', 'config.json');
+  return env.JAT_CONFIG || join(configDir(env), 'config.json');
 }
 
 export async function loadConfig(path) {

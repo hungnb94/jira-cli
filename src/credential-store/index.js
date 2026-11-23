@@ -1,5 +1,4 @@
-import { dirname } from 'node:path';
-import { configPath } from '../config.js';
+import { configDir } from '../config.js';
 import { createDpapiStore } from './dpapi.js';
 import { StoreUnavailableError } from './errors.js';
 import { createFileStore } from './file.js';
@@ -20,7 +19,7 @@ const CANDIDATES_BY_PLATFORM = {
   win32: ['dpapi'],
 };
 
-export function createStores({ platform = process.platform, run = runTool, dir = dirname(configPath()), env = process.env } = {}) {
+export function createStores({ env = process.env, platform = process.platform, run = runTool, dir = configDir(env) } = {}) {
   const deps = { run, dir, env };
 
   function byId(id) {
