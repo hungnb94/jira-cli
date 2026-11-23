@@ -2,7 +2,7 @@
 // Fails when releasing changes reached main without a version bump.
 //
 // Two PRs that bump to the same version merge cleanly, because git sees the
-// same edit on both sides. The second PR's changes then never get released, since
+// same edit on both sides. The second PR's changes then never reach npm, since
 // that version is already published. This guard lists commits on main after the
 // commit that set the current version whose Conventional Commits type needs a
 // release, unless their PR has the `skip-release` label.
@@ -41,7 +41,7 @@ export function requiredBump(changes) {
 export function formatFailure(version, changes) {
   const bump = requiredBump(changes)
   return [
-    `These commits reached main after ${version} was set, so they are not released:`,
+    `These commits reached main after ${version} was set, so they are not on npm:`,
     ...changes.map(({ sha, subject }) => `- ${sha.slice(0, 7)} ${subject}`),
     '',
     `Open a PR that bumps the version to ${nextVersion(version, bump)} (${bump}):`,
