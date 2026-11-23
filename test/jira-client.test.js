@@ -23,6 +23,10 @@ before(async () => {
       '/rest/api/3/attachment/content/3': '/rest/api/3/attachment/content/3',
       '/rest/api/3/attachment/content/4': `${media.origin}/missing?token=SIGNED`,
     };
+    if (req.url === '/rest/api/3/attachment/content/5') {
+      res.statusCode = 302;
+      return res.end();
+    }
     if (redirects[req.url]) {
       res.statusCode = 302;
       res.setHeader('location', redirects[req.url]);
@@ -67,6 +71,10 @@ test('refuses redirects to hosts outside the allowlist', async () => {
 
 test('stops redirect loops', async () => {
   await assert.rejects(client().openAttachment('3'), /Too many redirects/);
+});
+
+test('fails clearly on a redirect without Location', async () => {
+  await assert.rejects(client().openAttachment('5'), /Redirect without Location/);
 });
 
 test('errors never leak the signed query string', async () => {

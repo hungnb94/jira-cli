@@ -65,7 +65,9 @@ export class JiraClient {
         return response;
       }
       await response.body?.cancel();
-      const next = new URL(response.headers.get('location') ?? '', url);
+      const location = response.headers.get('location');
+      if (!location) throw new Error(`Redirect without Location for attachment ${id}`);
+      const next = new URL(location, url);
       this.#assertAllowedUrl(next);
       if (next.origin !== url.origin) headers = { Accept: '*/*' };
       url = next;
