@@ -4,7 +4,7 @@ import { configPath, loadConfig, saveConfig } from './config.js';
 import { downloadAttachments, selectAttachments } from './download.js';
 import { promptHidden } from './hidden-input.js';
 import { HttpError, JiraClient, assertIssueKey } from './jira-client.js';
-import { deleteToken, hasToken, readToken, storeToken } from './keychain.js';
+import { LEGACY_STORE, createStores, storeWithFallback } from './credential-store/index.js';
 import { printable } from './safe-name.js';
 
 const DEFAULT_MAX_MB = 200;
@@ -18,7 +18,13 @@ const USAGE = `Usage:
   jat list <KEY> [--json]
   jat get <KEY> [--out <dir>] [--filter <text>] [--max-size <MB>] [--json]
 
-The API token is read from a hidden prompt (or the first line of stdin) and stored only in the macOS Keychain.`;
+The API token is read from a hidden prompt (or the first line of stdin) and stored only in the OS credential
+store: macOS Keychain, a DPAPI-encrypted file on Windows, or the Secret Service keyring on Linux (with a 0600
+file as the fallback when no keyring is running).
+
+Add the agent skill (Claude Code, Cursor, Codex …): npx skills add hungnb94/jira-cli --skill jira-attachments`;
+
+const SKILL_HINT = 'Tip: add the agent skill with: npx skills add hungnb94/jira-cli --skill jira-attachments';
 
 const OPTIONS = {
   site: { type: 'string' },
@@ -31,7 +37,7 @@ const OPTIONS = {
   help: { type: 'boolean', short: 'h', default: false },
 };
 
-export async function main(argv, { stdout = process.stdout, stderr = process.stderr } = {}) {
+export async function main(argv, { stdout = process.stdout, stderr = process.stderr, stores } = {}) {
   const io = { out: (line) => stdout.write(`${line}\n`), err: (line) => stderr.write(`${line}\n`) };
   try {
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
@@ -40,11 +46,12 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
       io.out(USAGE);
       return 0;
     }
-    if (command === 'auth' && sub === 'login') return await login(values, io);
-    if (command === 'auth' && sub === 'status') return await status(io);
-    if (command === 'auth' && sub === 'logout') return await logout(io);
-    if (command === 'list') return await list(sub, values, io);
-    if (command === 'get') return await get(sub, values, io);
+    const credentials = stores ?? createStores();
+    if (command === 'auth' && sub === 'login') return await login(values, io, credentials);
+    if (command === 'auth' && sub === 'status') return await status(io, credentials);
+    if (command === 'auth' && sub === 'logout') return await logout(io, credentials);
+    if (command === 'list') return await list(sub, values, io, credentials);
+    if (command === 'get') return await get(sub, values, io, credentials);
     io.err(USAGE);
     return 2;
   } catch (error) {
@@ -53,7 +60,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   }
 }
 
-async function login(values, io) {
+async function login(values, io, stores) {
   const site = String(values.site ?? '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
   const email = String(values.email ?? '').trim();
   if (!SITE.test(site)) throw new Error('--site must look like <name>.atlassian.net');
@@ -64,11 +71,32 @@ async function login(values, io) {
 
   const { apiBase, user } = await resolveApiBase(site, email, token);
   const previous = await loadConfig(configPath());
-  await storeToken(email, token, { promptOnRead: !values['allow-silent-read'] });
-  if (previous?.email && previous.email !== email) await deleteToken(previous.email).catch(() => {});
-  await saveConfig(configPath(), { site, email, apiBase });
+  const promptOnRead = !values['allow-silent-read'];
+  const { store, skipped } = await storeWithFallback(stores.candidates(), email, token, { promptOnRead });
+  await removePreviousToken(previous, { email, store }, stores);
+  const silentRead = store.silentRead({ promptOnRead });
+  await saveConfig(configPath(), { site, email, apiBase, store: store.id, silentRead });
+  for (const { store: unavailable, reason } of skipped) {
+    io.err(`warning: ${unavailable.label} is not available (${reason}); stored the token in ${store.label} instead.`);
+  }
+  if (silentRead) {
+    io.err(`warning: any program running as your user can read the token from ${store.label} without asking you.`);
+  }
   io.out(`Logged in as ${printable(user.displayName ?? email)} via ${apiBase}`);
+  io.out(`Token stored in ${store.label}.`);
+  io.out(SKILL_HINT);
   return 0;
+}
+
+async function removePreviousToken(previous, current, stores) {
+  if (!previous?.email) return;
+  const previousStoreId = previous.store ?? LEGACY_STORE;
+  if (previous.email === current.email && previousStoreId === current.store.id) return;
+  try {
+    await stores.byId(previousStoreId).delete(previous.email);
+  } catch {
+    // The old token may already be gone or its store unreachable; the new login must still succeed.
+  }
 }
 
 // Classic API tokens work on the site URL; scoped tokens only work through the api.atlassian.com gateway.
@@ -94,39 +122,48 @@ async function resolveApiBase(site, email, token) {
   }
 }
 
-async function status(io) {
+async function status(io, stores) {
   const config = await loadConfig(configPath());
   if (!config) {
     io.out('Not logged in.');
     return 1;
   }
-  const stored = await hasToken(config.email);
-  io.out(`site: ${config.site}\nemail: ${config.email}\napi: ${config.apiBase}\ntoken in Keychain: ${stored ? 'yes' : 'no'}`);
+  const store = configuredStore(config, stores);
+  const stored = await store.has(config.email);
+  const lines = [`site: ${config.site}`, `email: ${config.email}`, `api: ${config.apiBase}`, `token store: ${store.label}`];
+  if (typeof config.silentRead === 'boolean') lines.push(`silent read: ${config.silentRead ? 'yes' : 'no'}`);
+  lines.push(`token stored: ${stored ? 'yes' : 'no'}`);
+  io.out(lines.join('\n'));
   return stored ? 0 : 1;
 }
 
-async function logout(io) {
+async function logout(io, stores) {
   const config = await loadConfig(configPath());
   if (!config) {
     io.out('Not logged in.');
     return 0;
   }
-  const removed = await deleteToken(config.email);
-  io.out(removed ? 'Token removed from Keychain.' : 'No token was stored.');
+  const store = configuredStore(config, stores);
+  const removed = await store.delete(config.email);
+  io.out(removed ? `Token removed from ${store.label}.` : 'No token was stored.');
   return 0;
 }
 
-async function authenticatedClient() {
+async function authenticatedClient(stores) {
   const config = await loadConfig(configPath());
   if (!config) throw new Error('Not logged in. Run: jat auth login --site <name>.atlassian.net --email <email>');
-  const token = await readToken(config.email);
+  const token = await configuredStore(config, stores).read(config.email);
   return new JiraClient({ apiBase: config.apiBase, email: config.email, token });
 }
 
-async function list(rawKey, values, io) {
+function configuredStore(config, stores) {
+  return stores.byId(config.store ?? LEGACY_STORE);
+}
+
+async function list(rawKey, values, io, stores) {
   const key = String(rawKey ?? '').toUpperCase();
   assertIssueKey(key);
-  const client = await authenticatedClient();
+  const client = await authenticatedClient(stores);
   const attachments = selectAttachments(await client.listAttachments(key), values.filter);
   if (values.json) {
     io.out(JSON.stringify(attachments, null, 2));
@@ -139,13 +176,13 @@ async function list(rawKey, values, io) {
   return 0;
 }
 
-async function get(rawKey, values, io) {
+async function get(rawKey, values, io, stores) {
   const key = String(rawKey ?? '').toUpperCase();
   assertIssueKey(key);
   const maxMb = Number(values['max-size'] ?? DEFAULT_MAX_MB);
   if (!Number.isFinite(maxMb) || maxMb <= 0) throw new Error('--max-size must be a positive number of MB');
   const outDir = resolve(values.out ?? key);
-  const client = await authenticatedClient();
+  const client = await authenticatedClient(stores);
   const results = await downloadAttachments(client, key, {
     outDir,
     filter: values.filter,

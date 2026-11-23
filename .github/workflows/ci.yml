@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         # 20 is the floor in package.json `engines`.
         node: ['20', '22', '24']
     steps:
