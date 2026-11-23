@@ -17,6 +17,11 @@ before(async () => {
       res.setHeader('content-type', 'application/json');
       return res.end(JSON.stringify({ fields: { attachment: [{ id: 1, filename: 'log.txt', size: 7, mimeType: 'text/plain' }] } }));
     }
+    if (req.url === '/rest/api/3/issue/PROJ-3?fields=attachment') {
+      res.statusCode = 401;
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ code: 401, message: 'Unauthorized; scope does not match' }));
+    }
     const redirects: Record<string, string> = {
       '/rest/api/3/attachment/content/1': `${media.origin}/file/1?token=SIGNED`,
       '/rest/api/3/attachment/content/2': 'https://evil.example.com/steal',
@@ -136,6 +141,15 @@ test('upload errors name the POST method and status', async () => {
   await assert.rejects(client().uploadAttachments('PROJ-9', [{ name: 'a', blob: new Blob(['a']) }]), (error) => {
     assert.ok(error instanceof HttpError);
     assert.match(error.message, /^POST .*\/rest\/api\/3\/issue\/PROJ-9\/attachments -> HTTP 401$/);
+    return true;
+  });
+});
+
+test('HTTP errors carry the message Jira sent back', async () => {
+  await assert.rejects(client().listAttachments('PROJ-3'), (error) => {
+    assert.ok(error instanceof HttpError);
+    assert.equal(error.detail, 'Unauthorized; scope does not match');
+    assert.match(error.message, /^GET .*\/issue\/PROJ-3 -> HTTP 401: Unauthorized; scope does not match$/);
     return true;
   });
 });

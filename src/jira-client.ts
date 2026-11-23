@@ -1,3 +1,5 @@
+import { readErrorDetail } from './jira-error.js';
+
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 const ATTACHMENT_ID = /^\d+$/;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -49,10 +51,12 @@ export const DEFAULT_ALLOWED_HOSTS: RegExp[] = [/(^|\.)atlassian\.net$/, /(^|\.)
 
 export class HttpError extends Error {
   readonly status: number;
+  readonly detail?: string;
 
-  constructor(method: HttpMethod, status: number, url: URL) {
-    super(`${method} ${url.origin}${url.pathname} -> HTTP ${status}`);
+  constructor(method: HttpMethod, status: number, url: URL, detail?: string) {
+    super(`${method} ${url.origin}${url.pathname} -> HTTP ${status}${detail ? `: ${detail}` : ''}`);
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -148,10 +152,7 @@ export class JiraClient {
       headers: { ...headers, Authorization: this.#authorization, Accept: 'application/json' },
       redirect: 'error',
     });
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new HttpError(method, response.status, url);
-    }
+    if (!response.ok) throw new HttpError(method, response.status, url, await readErrorDetail(response));
     return response.json();
   }
 
