@@ -14,7 +14,7 @@ test('stores in the first candidate that works', async () => {
 });
 
 test('falls back to the next candidate and reports why', async () => {
-  const keyring = fakeStore('secret-service', { failStore: true });
+  const keyring = fakeStore('secret-service', { unavailable: true });
   const file = fakeStore('file');
   const { store, skipped } = await storeWithFallback([keyring, file], 'me@example.com', 'tok', {});
   assert.equal(store, file);
@@ -23,12 +23,22 @@ test('falls back to the next candidate and reports why', async () => {
 });
 
 test('fails when no candidate can store the token, without echoing it', async () => {
-  const stores = [fakeStore('a', { failStore: true }), fakeStore('b', { failStore: true })];
+  const stores = [fakeStore('a', { unavailable: true }), fakeStore('b', { unavailable: true })];
   await assert.rejects(storeWithFallback(stores, 'me@example.com', 'tok-secret', {}), (error) => {
     assert.match(error.message, /Fake a: a is not available; Fake b: b is not available/);
     assert.doesNotMatch(error.message, /tok-secret/);
     return true;
   });
+});
+
+test('a store that exists but fails does not fall back to the next one', async () => {
+  const keyring = fakeStore('secret-service', { failStore: true });
+  const file = fakeStore('file');
+  await assert.rejects(
+    storeWithFallback([keyring, file], 'me@example.com', 'tok', {}),
+    /Could not store the token in Fake secret-service: secret-service rejected the token/,
+  );
+  assert.equal(file.tokens.size, 0);
 });
 
 test('macOS uses the Keychain only', () => {

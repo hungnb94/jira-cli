@@ -1,6 +1,7 @@
 import { dirname } from 'node:path';
 import { configPath } from '../config.js';
 import { createDpapiStore } from './dpapi.js';
+import { StoreUnavailableError } from './errors.js';
 import { createFileStore } from './file.js';
 import { createKeychainStore } from './keychain.js';
 import { runTool } from './run.js';
@@ -47,6 +48,7 @@ export async function storeWithFallback(candidates, account, token, options) {
       await store.store(account, token, options);
       return { store, skipped };
     } catch (error) {
+      if (!(error instanceof StoreUnavailableError)) throw new Error(`Could not store the token in ${store.label}: ${error.message}`);
       skipped.push({ store, reason: error.message });
     }
   }

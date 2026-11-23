@@ -1,4 +1,6 @@
-export function fakeStore(id, { failStore = false, silent = false } = {}) {
+import { StoreUnavailableError } from '../../src/credential-store/errors.js';
+
+export function fakeStore(id, { failStore = false, unavailable = false, silent = false } = {}) {
   const tokens = new Map();
   return {
     id,
@@ -13,7 +15,8 @@ export function fakeStore(id, { failStore = false, silent = false } = {}) {
       return tokens.has(account);
     },
     async store(account, token) {
-      if (failStore) throw new Error(`${id} is not available`);
+      if (unavailable) throw new StoreUnavailableError(`${id} is not available`);
+      if (failStore) throw new Error(`${id} rejected the token`);
       tokens.set(account, token);
     },
     async delete(account) {
