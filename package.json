@@ -1,7 +1,7 @@
 {
   "name": "@hungnb94/jat",
   "version": "0.4.0",
-  "description": "Download Jira Cloud attachments with the API token kept in the OS credential store (macOS Keychain, Windows DPAPI, Linux Secret Service)",
+  "description": "Download and upload Jira Cloud attachments with the API token kept in the OS credential store (macOS Keychain, Windows DPAPI, Linux Secret Service)",
   "type": "module",
   "bin": {
     "jat": "dist/bin.js"

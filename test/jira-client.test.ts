@@ -100,3 +100,42 @@ test('reports 401 without exposing credentials', async () => {
     return true;
   });
 });
+
+test('uploads files as one multipart POST with the no-check header', async () => {
+  let seen: { method?: string; token?: string | string[]; type?: string; body: string } = { body: '' };
+  const uploads = await startServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      seen = { method: req.method, token: req.headers['x-atlassian-token'], type: req.headers['content-type'], body };
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify([{ id: '20', filename: 'crash.log', size: 4, mimeType: 'text/plain', created: 'now', self: 'x' }]));
+    });
+  });
+  try {
+    const uploader = new JiraClient({ apiBase: uploads.origin, email: 'me@x.io', token: 'SECRET', allowedHosts: LOOPBACK, allowInsecure: true });
+    const created = await uploader.uploadAttachments('PROJ-1', [{ name: 'crash.log', blob: new Blob(['boom']) }]);
+    assert.deepEqual(created, [{ id: '20', filename: 'crash.log', size: 4, mimeType: 'text/plain', created: 'now' }]);
+    assert.equal(uploads.requests[0].url, '/rest/api/3/issue/PROJ-1/attachments');
+    assert.match(uploads.requests[0].authorization ?? '', /^Basic /);
+    assert.equal(seen.method, 'POST');
+    assert.equal(seen.token, 'no-check');
+    assert.match(seen.type ?? '', /^multipart\/form-data; boundary=/);
+    assert.match(seen.body, /Content-Disposition: form-data; name="file"; filename="crash.log"\r\n[\s\S]*\r\n\r\nboom\r\n/);
+  } finally {
+    await uploads.close();
+  }
+});
+
+test('rejects a malformed key before uploading', async () => {
+  await assert.rejects(client().uploadAttachments('PROJ-1/../x', []), /Invalid Jira key/);
+});
+
+test('upload errors name the POST method and status', async () => {
+  await assert.rejects(client().uploadAttachments('PROJ-9', [{ name: 'a', blob: new Blob(['a']) }]), (error) => {
+    assert.ok(error instanceof HttpError);
+    assert.match(error.message, /^POST .*\/rest\/api\/3\/issue\/PROJ-9\/attachments -> HTTP 401$/);
+    return true;
+  });
+});

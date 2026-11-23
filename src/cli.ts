@@ -1,4 +1,4 @@
-import { get, list } from './commands/attachments.js';
+import { get, list, upload } from './commands/attachments.js';
 import { login, logout, status } from './commands/auth.js';
 import { parse, type Io } from './commands/types.js';
 import { createStores, type CredentialStores } from './credential-store/index.js';
@@ -11,6 +11,7 @@ const USAGE = `Usage:
   jat auth logout
   jat list <KEY> [--json]
   jat get <KEY> [--out <dir>] [--filter <text>] [--max-size <MB>] [--json]
+  jat upload <KEY> <file>... [--json]
   jat --version
 
 The API token is read from a hidden prompt (or the first line of stdin) and stored only in the OS credential
@@ -51,6 +52,7 @@ export async function main(
     if (command === 'auth' && sub === 'logout') return await logout(io, credentials);
     if (command === 'list') return await list(sub, values, io, credentials);
     if (command === 'get') return await get(sub, values, io, credentials);
+    if (command === 'upload') return await upload(sub, positionals.slice(2), values, io, credentials);
     io.err(USAGE);
     return 2;
   } catch (error) {

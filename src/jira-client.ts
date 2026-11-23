@@ -12,6 +12,11 @@ export interface Attachment {
   created?: string;
 }
 
+export interface UploadFile {
+  name: string;
+  blob: Blob;
+}
+
 export interface JiraUser {
   displayName?: string;
 }
@@ -51,6 +56,10 @@ export class HttpError extends Error {
   }
 }
 
+function toAttachment(a: RawAttachment): Attachment {
+  return { id: String(a.id), filename: a.filename, size: a.size, mimeType: a.mimeType, created: a.created };
+}
+
 export function assertIssueKey(key: string): void {
   if (!ISSUE_KEY.test(key)) throw new Error(`Invalid Jira key: ${key}`);
 }
@@ -87,13 +96,18 @@ export class JiraClient {
     const issue = (await this.#requestJson('GET', `/rest/api/3/issue/${key}?fields=attachment`)) as {
       fields?: { attachment?: RawAttachment[] };
     };
-    return (issue.fields?.attachment ?? []).map((a) => ({
-      id: String(a.id),
-      filename: a.filename,
-      size: a.size,
-      mimeType: a.mimeType,
-      created: a.created,
-    }));
+    return (issue.fields?.attachment ?? []).map(toAttachment);
+  }
+
+  async uploadAttachments(key: string, files: UploadFile[]): Promise<Attachment[]> {
+    assertIssueKey(key);
+    const form = new FormData();
+    for (const file of files) form.append('file', file.blob, file.name);
+    const created = (await this.#requestJson('POST', `/rest/api/3/issue/${key}/attachments`, {
+      body: form,
+      headers: { 'X-Atlassian-Token': 'no-check' },
+    })) as RawAttachment[];
+    return created.map(toAttachment);
   }
 
   // Follows redirects by hand: the content URL redirects to a signed media URL on another host,
