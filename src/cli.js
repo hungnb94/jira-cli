@@ -6,6 +6,7 @@ import { promptHidden } from './hidden-input.js';
 import { HttpError, JiraClient, assertIssueKey } from './jira-client.js';
 import { LEGACY_STORE, createStores, storeWithFallback } from './credential-store/index.js';
 import { printable } from './safe-name.js';
+import { packageVersion } from './version.js';
 
 const DEFAULT_MAX_MB = 200;
 const SITE = /^[a-z0-9-]+\.atlassian\.net$/;
@@ -17,6 +18,7 @@ const USAGE = `Usage:
   jat auth logout
   jat list <KEY> [--json]
   jat get <KEY> [--out <dir>] [--filter <text>] [--max-size <MB>] [--json]
+  jat --version
 
 The API token is read from a hidden prompt (or the first line of stdin) and stored only in the OS credential
 store: macOS Keychain, a DPAPI-encrypted file on Windows, or the Secret Service keyring on Linux (with a 0600
@@ -35,6 +37,7 @@ const OPTIONS = {
   'max-size': { type: 'string' },
   json: { type: 'boolean', default: false },
   help: { type: 'boolean', short: 'h', default: false },
+  version: { type: 'boolean', short: 'V', default: false },
 };
 
 export async function main(argv, { stdout = process.stdout, stderr = process.stderr, stores } = {}) {
@@ -42,6 +45,10 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
   try {
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
     const [command, sub] = positionals;
+    if (values.version) {
+      io.out(packageVersion());
+      return 0;
+    }
     if (values.help || !command) {
       io.out(USAGE);
       return 0;

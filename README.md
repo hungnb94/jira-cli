@@ -47,6 +47,7 @@ From a clone instead: `npm test`, then `npm link` (or `ln -s "$PWD/bin/jat.js" ~
 jat list PROJ-5140
 jat get PROJ-5140                       # into ./PROJ-5140/
 jat get PROJ-5140 --filter mp4 --out ~/Downloads/PROJ-5140 --json
+jat --version                           # installed version, e.g. 0.3.0
 ```
 
 ## Contributing
